@@ -10,12 +10,13 @@ namespace day03
     {
         static void Main(string[] args)
         {
-#if false
+#if true
             var wires = File.ReadAllLines(args.FirstOrDefault() ?? "input.txt");
 
-            var minimumIntersectDistance = FindMinimumDistance(wires);
+            AnalyzeWires(wires, out var minDistance, out var minTotalSteps);
 
-            Console.WriteLine($"Result: {minimumIntersectDistance}");
+            Console.WriteLine($"Minimumn Distance: {minDistance}");
+            Console.WriteLine($"Minimum Total Steps: {minTotalSteps}");
 #else
             var tests = new[]
             {
@@ -45,42 +46,43 @@ namespace day03
                 foreach (var line in test.Wires)
                     Console.WriteLine(line);
 
-                var result = FindMinimumDistance(test.Wires);
+                AnalyzeWires(test.Wires, out var minDistance, out var minTotalSteps);
 
-                Console.WriteLine($"Pass?: {result == test.MinimumDistance}");
+                Console.WriteLine($"Minimum Distance = {minDistance} - Pass?: {minDistance == test.MinimumDistance}");
+                Console.WriteLine($"Minimum Total Steps = {minTotalSteps} - Pass?: {minTotalSteps == test.MinimumTotalSteps}");
                 Console.WriteLine();
             }
 #endif
         }
 
-        private static int FindMinimumDistance(IEnumerable<string> wires)
+        private static void AnalyzeWires(IEnumerable<string> wires, out int minDistance, out int minTotalSteps)
         {
-            var allPoints = from w in wires
-                            let moves = ParseMoves(w)
-                            select CollectAllPoints(moves);
+            var steps = (from w in wires
+                         let moves = ParseMoves(w)
+                         select CollectAllSteps(moves).ToImmutableArray()).ToList();
 
-            var intersections = allPoints.Aggregate((a, b) => a.Intersect(b));
+            var intersections = steps.Select(x => x.ToImmutableHashSet())
+                                     .Aggregate((a, b) => a.Intersect(b));
 
-            return intersections.Min(p => ManhattanDistance(p));
+            minDistance = intersections.Min(p => ManhattanDistance(p));
+
+            minTotalSteps = intersections.Min(p => steps.Sum(w => w.IndexOf(p) + 1));
         }
 
         private static IEnumerable<Move> ParseMoves(string moves)
             => moves.Split(',').Select(Move.Parse);
 
-        private static ImmutableHashSet<(int x, int y)> CollectAllPoints(IEnumerable<Move> moves, (int x, int y) origin = default)
+        private static IEnumerable<(int x, int y)> CollectAllSteps(IEnumerable<Move> moves, (int x, int y) origin = default)
         {
-            var result = ImmutableHashSet.CreateBuilder<(int x, int y)>();
             var current = origin;
             foreach (var move in moves)
             {
                 foreach (var position in move.GetSteps(current))
                 {
-                    result.Add(position);
+                    yield return position;
                     current = position;
                 }
             }
-
-            return result.ToImmutable();
         }
 
         private static int ManhattanDistance((int x, int y) a, (int x, int y) b = default)
