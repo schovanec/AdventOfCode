@@ -14,7 +14,7 @@ namespace day05
             this.memory = memory.ToArray();
         }
 
-        public int InstructionCounter { get; set; }
+        public int ProgramCounter { get; set; }
 
         public int this[int address] => memory[address];
 
@@ -22,64 +22,45 @@ namespace day05
 
         public void Execute(Func<int> read = null, Action<int> write = null)
         {
-#if true
             var state = new State(memory, write, read);
 
             while (true)
             {
-                var op = new Instruction(state, InstructionCounter);
-                if (!operationMap.TryGetValue(op.OpCode, out var handler) || handler == null)
-                    throw new InvalidOperationException("Invalid instruction");
+                var op = new Instruction(state, ProgramCounter);
+                var handler = GetHandler(op);
 
-                var nextInstructionOffset = handler(op);
-                if (nextInstructionOffset < 0)
+                var result = handler(op);
+                if (result.IsHalt)
                     break;
 
-                InstructionCounter += nextInstructionOffset + 1;
+                ProgramCounter = result.GetNextAddress(ProgramCounter);
             }
-#else
-            int ip = 0;
-            while (true)
-            {
-                var op = memory[ip];
-                if (op == OperationHalt)
-                    break;
-
-                var param1 = memory[memory[ip + OffsetParam1]];
-                var param2 = memory[memory[ip + OffsetParam2]];
-
-                int result;
-                switch (op)
-                {
-                    case OperationAdd:
-                        result = param1 + param2;
-                        break;
-
-                    case OperationMultiply:
-                        result = param1 * param2;
-                        break;
-
-                    default:
-                        throw new InvalidOperationException("Invalid Operation!");
-                }
-
-                memory[memory[ip + OffsetOutput]] = result;
-
-                ip += InstructionSize;
-            }
-#endif
         }
 
-        private static readonly ImmutableDictionary<int, Func<Instruction, int>> operationMap = new Dictionary<int, Func<Instruction, int>>()
-        {
-            { 1, DoAdd },
-            { 2, DoMultiply },
-            { 3, DoInput },
-            { 4, DoOutput },
-            { 99, _ => -1 }
-        }.ToImmutableDictionary();
+        private static Func<Instruction, OperationResult> GetHandler(Instruction op)
+            => op.OpCode switch
+            {
+                1 => op => DoBinaryOperation(op, (a, b) => a + b),
+                2 => op => DoBinaryOperation(op, (a, b) => a * b),
+                3 => DoInput,
+                4 => DoOutput,
+                5 => op => DoConditionalJump(op, x => x != 0),
+                6 => op => DoConditionalJump(op, x => x == 0),
+                7 => op => DoBinaryOperation(op, (a, b) => a < b ? 1 : 0),
+                8 => op => DoBinaryOperation(op, (a, b) => a == b ? 1 : 0),
+                99 => _ => OperationResult.Halt,
+                _ => throw new InvalidOperationException("Invalid instruction")
+            };
 
-        private static int DoAdd(Instruction op)
+        private static OperationResult DoBinaryOperation(Instruction op, Func<int, int, int> func)
+        {
+            var result = func(op.ReadArgument(0), op.ReadArgument(1));
+            op.WriteResult(2, result);
+            return OperationResult.FromParameterCount(3);
+        }
+
+#if false
+        private static OperationResult DoAdd(Instruction op)
         {
             var param1 = op.ReadArgument(0);
             var param2 = op.ReadArgument(1);
@@ -88,10 +69,10 @@ namespace day05
 
             op.WriteResult(2, result);
 
-            return 3;
+            return OperationResult.FromParameterCount(3);
         }
 
-        private static int DoMultiply(Instruction op)
+        private static OperationResult DoMultiply(Instruction op)
         {
             var param1 = op.ReadArgument(0);
             var param2 = op.ReadArgument(1);
@@ -100,23 +81,32 @@ namespace day05
 
             op.WriteResult(2, result);
 
-            return 3;
+            return OperationResult.FromParameterCount(3);
         }
+#endif
 
-        private static int DoInput(Instruction op)
+        private static OperationResult DoInput(Instruction op)
         {
             var value = op.ReadInput();
             op.WriteResult(0, value);
 
-            return 1;
+            return OperationResult.FromParameterCount(1);
         }
 
-        private static int DoOutput(Instruction op)
+        private static OperationResult DoOutput(Instruction op)
         {
             var value = op.ReadArgument(0);
             op.WriteOutput(value);
 
-            return 1;
+            return OperationResult.FromParameterCount(1);
+        }
+
+        private static OperationResult DoConditionalJump(Instruction op, Predicate<int> condition)
+        {
+            var value = op.ReadArgument(0);
+            return condition(value)
+                ? OperationResult.JumpTo(op.ReadArgument(1))
+                : OperationResult.FromParameterCount(2);
         }
 
         private sealed class State
@@ -190,6 +180,36 @@ namespace day05
             public void WriteOutput(int output) => state.Write(output);
 
             public int ReadInput() => state.Read();
+        }
+
+        private readonly struct OperationResult
+        {
+            public static readonly OperationResult Halt = new OperationResult(-1, true);
+
+            public OperationResult(int address, bool isAbsolute = false)
+            {
+                Address = address;
+                IsAbsolute = isAbsolute;
+            }
+
+            public int Address { get; }
+
+            public bool IsAbsolute { get; }
+
+            public bool IsHalt => IsAbsolute && Address < 0;
+
+            public int GetNextAddress(int currentAddress)
+                => IsAbsolute ? Address : (currentAddress + Address);
+
+            public static OperationResult FromParameterCount(int count)
+                => count >= 0
+                    ? new OperationResult(1 + count)
+                    : throw new ArgumentOutOfRangeException(nameof(count));
+
+            public static OperationResult JumpTo(int address)
+                => address >= 0
+                    ? new OperationResult(address, true)
+                    : throw new ArgumentOutOfRangeException(nameof(address));
         }
     }
 }
