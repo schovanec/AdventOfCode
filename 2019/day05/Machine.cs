@@ -1,14 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 
 namespace day05
 {
-    public class Machine
+    public sealed class Machine
     {
         private readonly int[] memory;
 
-        public Machine(ReadOnlySpan<int> memory)
+        public Machine(IEnumerable<int> memory)
         {
             this.memory = memory.ToArray();
         }
@@ -19,31 +20,22 @@ namespace day05
 
         public ReadOnlyMemory<int> Memory => memory.AsMemory();
 
-        protected virtual int ReadInput()
-        {
-            var line = Console.ReadLine();
-            return int.Parse(line);
-        }
-
-        protected virtual void WriteOutput(int value)
-        {
-            Console.WriteLine(value);
-        }
-
-        public void Execute()
+        public void Execute(Func<int> read = null, Action<int> write = null)
         {
 #if true
+            var state = new State(memory, write, read);
+
             while (true)
             {
-                var op = new Instruction(memory, InstructionCounter);
+                var op = new Instruction(state, InstructionCounter);
                 if (!operationMap.TryGetValue(op.OpCode, out var handler) || handler == null)
                     throw new InvalidOperationException("Invalid instruction");
 
                 var nextInstructionOffset = handler(op);
-                if (nextInstructionOffset <= 0)
+                if (nextInstructionOffset < 0)
                     break;
 
-                InstructionCounter += nextInstructionOffset;
+                InstructionCounter += nextInstructionOffset + 1;
             }
 #else
             int ip = 0;
@@ -82,7 +74,9 @@ namespace day05
         {
             { 1, DoAdd },
             { 2, DoMultiply },
-            { 99, _ => 0 }
+            { 3, DoInput },
+            { 4, DoOutput },
+            { 99, _ => -1 }
         }.ToImmutableDictionary();
 
         private static int DoAdd(Instruction op)
@@ -94,7 +88,7 @@ namespace day05
 
             op.WriteResult(2, result);
 
-            return 4;
+            return 3;
         }
 
         private static int DoMultiply(Instruction op)
@@ -106,34 +100,68 @@ namespace day05
 
             op.WriteResult(2, result);
 
-            return 4;
+            return 3;
+        }
+
+        private static int DoInput(Instruction op)
+        {
+            var value = op.ReadInput();
+            op.WriteResult(0, value);
+
+            return 1;
+        }
+
+        private static int DoOutput(Instruction op)
+        {
+            var value = op.ReadArgument(0);
+            op.WriteOutput(value);
+
+            return 1;
+        }
+
+        private sealed class State
+        {
+            public State(int[] memory, Action<int> write = null, Func<int> read = null)
+            {
+                Memory = memory;
+                Write = write ?? (_ => { });
+                Read = read ?? (() => throw new InvalidOperationException("No input available"));
+            }
+
+            public int[] Memory { get; }
+
+            public Action<int> Write { get; }
+
+            public Func<int> Read { get; }
         }
 
         readonly struct Instruction
         {
             private const int OpcodeLimit = 100;
 
-            private readonly int[] memory;
-            private readonly int position;
+            private readonly State state;
 
-            public Instruction(int[] memory, int position)
+            private readonly int ip;
+
+            public Instruction(State state, int ip)
             {
-                this.memory = memory;
-                this.position = position;
+                this.state = state;
+                this.ip = ip;
             }
 
-            public int OpCode => memory[position] % OpcodeLimit;
+            private int[] Memory => state.Memory;
+
+            public int OpCode => Memory[ip] % OpcodeLimit;
 
             public int ReadArgument(int argumentOffset)
             {
                 if (argumentOffset < 0)
                     throw new ArgumentOutOfRangeException(nameof(argumentOffset));
 
-                var value = memory[position + argumentOffset + 1];
-                //var mode = (memory[position] / (OpcodeLimit * argumentOffset)) % 10;
+                var value = Memory[ip + argumentOffset + 1];
                 return IsImmediate(argumentOffset)
                     ? value
-                    : memory[value];
+                    : Memory[value];
             }
 
             private bool IsImmediate(int argumentOffset)
@@ -147,7 +175,7 @@ namespace day05
                     _ => throw new ArgumentException("Invalid Argument", nameof(argumentOffset))
                 };
 
-                return ((memory[position] / digit) % 10) == 1;
+                return ((Memory[ip] / digit) % 10) == 1;
             }
 
             public void WriteResult(int argumentOffset, int value)
@@ -155,9 +183,13 @@ namespace day05
                 if (argumentOffset < 0)
                     throw new ArgumentOutOfRangeException(nameof(argumentOffset));
 
-                var address = memory[position + argumentOffset + 1];
-                memory[address] = value;
+                var address = Memory[ip + argumentOffset + 1];
+                Memory[address] = value;
             }
+
+            public void WriteOutput(int output) => state.Write(output);
+
+            public int ReadInput() => state.Read();
         }
     }
 }
