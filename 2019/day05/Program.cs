@@ -9,49 +9,129 @@ namespace day05
     {
         static void Main(string[] args)
         {
-#if false
+#if true
             var fileName = args.FirstOrDefault() ?? "input.txt";
 
             // read the program
             var input = File.ReadLines(fileName).First();
-            var program = input.Split(',').Select(x => int.Parse(x)).ToImmutableArray();
+            var program = input.Split(',').Select(int.Parse);
 
-            const int target = 19690720;
-            for (int noun = 0; noun <= 99; ++noun)
-            {
-                for (int verb = 0; verb <= 99; ++verb)
-                {
-                    var memory = program.ToList();
-                    memory[1] = noun;
-                    memory[2] = verb;
-                    ExecuteIntcode(memory);
-
-                    var result = memory[0];
-                    if (result == target)
-                    {
-                        Console.WriteLine($"Found! noun={noun}, verb={verb}, 100*noun + verb = {100 * noun + verb}");
-                    }
-                }
-            }
-
-            // Solution to part 1: 9581917
+            var machine = new Machine(program);
+            machine.Execute(
+                read: ReadInputValue,
+                write: WriteOutputValue
+            );
 #else
-            var tests = new (int[] program, int[] result)[]
+            var tests = new[]
             {
-                (new [] { 1,0,0,0,99 }, new [] { 2,0,0,0,99 }),
-                (new [] { 2,3,0,3,99 }, new [] { 2,3,0,6,99 }),
-                (new [] { 2,4,4,5,99,0 }, new [] { 2,4,4,5,99,9801 }),
-                (new [] { 1,1,1,4,99,5,6,0,99 }, new [] { 30,1,1,4,2,5,6,0,99 })
+                new TestCase
+                {
+                    Program = "1,0,0,0,99",
+                    ExpectedFinalState = "2,0,0,0,99"
+                },
+                new TestCase
+                {
+                    Program = "2,3,0,3,99",
+                    ExpectedFinalState = "2,3,0,6,99"
+                },
+                new TestCase
+                {
+                    Program = "2,4,4,5,99,0",
+                    ExpectedFinalState = "2,4,4,5,99,9801"
+                },
+                new TestCase
+                {
+                    Program = "1,1,1,4,99,5,6,0,99",
+                    ExpectedFinalState = "30,1,1,4,2,5,6,0,99"
+                },
+                new TestCase
+                {
+                    Program = "3,0,4,0,99",
+                    ExpectedFinalState = "1,0,4,0,99",
+                    Input = "1",
+                    ExpectedOutput = "1"
+                },
+                new TestCase
+                {
+                    Program = "3,0,4,0,99",
+                    ExpectedFinalState = "9876,0,4,0,99",
+                    Input = "9876",
+                    ExpectedOutput = "9876"
+                },
+                new TestCase
+                {
+                    Program = "1002,4,3,4,33",
+                    ExpectedFinalState = "1002,4,3,4,99"
+                }
             };
 
+            var count = 0;
             foreach (var test in tests)
             {
-                var machine = new Machine(test.program);
-                machine.Execute();
+                var machine = new Machine(test.ProgramSequence);
+
+                var output = new List<int>();
+                using var input = test.InputSequence.GetEnumerator();
+
+                machine.Execute(
+                    read: () => input.MoveNext() ? input.Current : 0,
+                    write: output.Add
+                );
+
                 var finalState = machine.Memory.ToArray();
-                Console.WriteLine($"{string.Join(",", test.program)} => {string.Join(",", finalState)} - Pass?: {finalState.SequenceEqual(test.result)}");
+
+                var expectedFinalState = test.ExpectedFinalStateSequence;
+                var expectedOutput = test.ExpectedOutputSequence;
+
+                Console.WriteLine($"Test #{++count}:");
+                Console.WriteLine($"               Input: [{test.Input}]");
+                Console.WriteLine($"             Program: [{test.Program}]");
+                Console.WriteLine($"Expected Final State: [{test.ExpectedFinalState}]");
+                Console.WriteLine($"  Actual Final State: [{string.Join(",", finalState)}] {(finalState.SequenceEqual(expectedFinalState) ? "Ok" : "Fail")}");
+                Console.WriteLine($"     Expected Output: [{test.ExpectedOutput}] {(output.SequenceEqual(expectedOutput) ? "Ok" : "Fail")}");
+                Console.WriteLine($"       Actual Output: [{string.Join(",", output)}]");
+                Console.WriteLine();
             }
 #endif
+        }
+
+        private static int ReadInputValue()
+        {
+            while (true)
+            {
+                Console.Write("Input a value: ");
+                if (int.TryParse(Console.ReadLine(), out var result))
+                    return result;
+
+                Console.WriteLine("Error: Invalid input!");
+            }
+        }
+
+        private static void WriteOutputValue(int value)
+        {
+            Console.WriteLine($"Output Value: {value}");
+        }
+
+        private class TestCase
+        {
+            public string Program { get; set; }
+
+            public IEnumerable<int> ProgramSequence => ParseInputString(Program);
+
+            public string Input { get; set; }
+
+            public IEnumerable<int> InputSequence => ParseInputString(Input);
+
+            public string ExpectedFinalState { get; set; }
+
+            public IEnumerable<int> ExpectedFinalStateSequence => ParseInputString(ExpectedFinalState);
+
+            public string ExpectedOutput { get; set; }
+
+            public IEnumerable<int> ExpectedOutputSequence => ParseInputString(ExpectedOutput);
+
+            private static IEnumerable<int> ParseInputString(string text)
+                => (text ?? "").Split(',').Where(x => x.Length > 0).Select(int.Parse);
         }
 
 #if false
