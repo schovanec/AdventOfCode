@@ -62,34 +62,118 @@ namespace day05
                 {
                     Program = "1002,4,3,4,33",
                     ExpectedFinalState = "1002,4,3,4,99"
-                }
+                },
+                new TestCase
+                {
+                    Program = "3,9,8,9,10,9,4,9,99,-1,8",
+                    Input = "8",
+                    ExpectedOutput = "1"
+                },
+                new TestCase
+                {
+                    Program = "3,9,8,9,10,9,4,9,99,-1,8",
+                    Input = "99",
+                    ExpectedOutput = "0"
+                },
+                new TestCase
+                {
+                    Program = "3,9,7,9,10,9,4,9,99,-1,8",
+                    Input = "7",
+                    ExpectedOutput = "1"
+                },
+                new TestCase
+                {
+                    Program = "3,9,7,9,10,9,4,9,99,-1,8",
+                    Input = "8",
+                    ExpectedOutput = "0"
+                },
+                new TestCase
+                {
+                    Program = "3,3,1108,-1,8,3,4,3,99",
+                    Input = "8",
+                    ExpectedOutput = "1"
+                },
+                new TestCase
+                {
+                    Program = "3,3,1108,-1,8,3,4,3,99",
+                    Input = "99",
+                    ExpectedOutput = "0"
+                },
+                new TestCase
+                {
+                    Program = "3,3,1107,-1,8,3,4,3,99",
+                    Input = "7",
+                    ExpectedOutput = "1"
+                },
+                new TestCase
+                {
+                    Program = "3,3,1107,-1,8,3,4,3,99",
+                    Input = "8",
+                    ExpectedOutput = "0"
+                },
+                new TestCase
+                {
+                    Program = "3,21,1008,21,8,20,1005,20,22,107,8,21,20,1006,20,31,1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99",
+                    Input = "7",
+                    ExpectedOutput = "999"
+                },
+                new TestCase
+                {
+                    Program = "3,21,1008,21,8,20,1005,20,22,107,8,21,20,1006,20,31,1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99",
+                    Input = "8",
+                    ExpectedOutput = "1000"
+                },
+                new TestCase
+                {
+                    Program = "3,21,1008,21,8,20,1005,20,22,107,8,21,20,1006,20,31,1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99",
+                    Input = "9",
+                    ExpectedOutput = "1001"
+                },
             };
 
             var count = 0;
             foreach (var test in tests)
             {
-                var machine = new Machine(test.ProgramSequence);
-
-                var output = new List<int>();
-                using var input = test.InputSequence.GetEnumerator();
-
-                machine.Execute(
-                    read: () => input.MoveNext() ? input.Current : 0,
-                    write: output.Add
-                );
-
-                var finalState = machine.Memory.ToArray();
-
-                var expectedFinalState = test.ExpectedFinalStateSequence;
-                var expectedOutput = test.ExpectedOutputSequence;
-
                 Console.WriteLine($"Test #{++count}:");
                 Console.WriteLine($"               Input: [{test.Input}]");
                 Console.WriteLine($"             Program: [{test.Program}]");
-                Console.WriteLine($"Expected Final State: [{test.ExpectedFinalState}]");
-                Console.WriteLine($"  Actual Final State: [{string.Join(",", finalState)}] {(finalState.SequenceEqual(expectedFinalState) ? "Ok" : "Fail")}");
-                Console.WriteLine($"     Expected Output: [{test.ExpectedOutput}] {(output.SequenceEqual(expectedOutput) ? "Ok" : "Fail")}");
-                Console.WriteLine($"       Actual Output: [{string.Join(",", output)}]");
+
+                if (!string.IsNullOrEmpty(test.ExpectedFinalState))
+                    Console.WriteLine($"Expected Final State: [{test.ExpectedFinalState}]");
+
+                if (!string.IsNullOrEmpty(test.ExpectedOutput))
+                    Console.WriteLine($"     Expected Output: [{test.ExpectedOutput}]");
+
+                try
+                {
+                    var machine = new Machine(test.ProgramSequence);
+
+                    var output = new List<int>();
+                    using var input = test.InputSequence.GetEnumerator();
+
+                    machine.Execute(
+                        read: () => input.MoveNext() ? input.Current : 0,
+                        write: output.Add
+                    );
+
+                    if (!string.IsNullOrEmpty(test.ExpectedFinalState))
+                    {
+                        var finalState = machine.Memory.ToArray();
+                        var expectedFinalState = test.ExpectedFinalStateSequence;
+                        Console.WriteLine($"  Actual Final State: [{string.Join(",", finalState)}] {(finalState.SequenceEqual(expectedFinalState) ? "Ok" : "Fail")}");
+                    }
+
+                    if (!string.IsNullOrEmpty(test.ExpectedOutput))
+                    {
+                        var expectedOutput = test.ExpectedOutputSequence;
+                        Console.WriteLine($"       Actual Output: [{string.Join(",", output)}] {(output.SequenceEqual(expectedOutput) ? "Ok" : "Fail")}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"    Execution Failed: {ex.Message}");
+                }
+
                 Console.WriteLine();
             }
 #endif
