@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace day07
 {
@@ -22,6 +23,21 @@ namespace day07
 
         public void Execute(Func<int> read = null, Action<int> write = null)
         {
+            Func<Task<int>> reader = null;
+            if (read != null)
+                reader = () => Task.FromResult(read());
+
+            Func<int, Task> writer = null;
+            if (write != null)
+                writer = x => { write(x); return Task.CompletedTask; };
+
+            ExecuteAsync(reader, writer)
+                .AsTask()
+                .Wait();
+        }
+
+        public async ValueTask ExecuteAsync(Func<Task<int>> read = null, Func<int, Task> write = null)
+        {
             var state = new State(memory, write, read);
 
             while (true)
@@ -29,7 +45,7 @@ namespace day07
                 var op = new Instruction(state, ProgramCounter);
                 var handler = GetHandler(op);
 
-                var result = handler(op);
+                var result = await handler(op);
                 if (result.IsHalt)
                     break;
 
@@ -37,7 +53,7 @@ namespace day07
             }
         }
 
-        private static Func<Instruction, OperationResult> GetHandler(Instruction op)
+        private static Func<Instruction, ValueTask<OperationResult>> GetHandler(Instruction op)
             => op.OpCode switch
             {
                 1 => op => DoBinaryOperation(op, (a, b) => a + b),
@@ -48,81 +64,58 @@ namespace day07
                 6 => op => DoConditionalJump(op, x => x == 0),
                 7 => op => DoBinaryOperation(op, (a, b) => a < b ? 1 : 0),
                 8 => op => DoBinaryOperation(op, (a, b) => a == b ? 1 : 0),
-                99 => _ => OperationResult.Halt,
+                99 => _ => new ValueTask<OperationResult>(OperationResult.Halt),
                 _ => throw new InvalidOperationException("Invalid instruction")
             };
 
-        private static OperationResult DoBinaryOperation(Instruction op, Func<int, int, int> func)
+        private static ValueTask<OperationResult> DoBinaryOperation(Instruction op, Func<int, int, int> func)
         {
             var result = func(op.ReadArgument(0), op.ReadArgument(1));
             op.WriteResult(2, result);
-            return OperationResult.FromParameterCount(3);
+            return new ValueTask<OperationResult>(OperationResult.FromParameterCount(3));
         }
 
-#if false
-        private static OperationResult DoAdd(Instruction op)
+        private static async ValueTask<OperationResult> DoInput(Instruction op)
         {
-            var param1 = op.ReadArgument(0);
-            var param2 = op.ReadArgument(1);
-
-            var result = param1 + param2;
-
-            op.WriteResult(2, result);
-
-            return OperationResult.FromParameterCount(3);
-        }
-
-        private static OperationResult DoMultiply(Instruction op)
-        {
-            var param1 = op.ReadArgument(0);
-            var param2 = op.ReadArgument(1);
-
-            var result = param1 * param2;
-
-            op.WriteResult(2, result);
-
-            return OperationResult.FromParameterCount(3);
-        }
-#endif
-
-        private static OperationResult DoInput(Instruction op)
-        {
-            var value = op.ReadInput();
+            var value = await op.ReadInput();
             op.WriteResult(0, value);
 
             return OperationResult.FromParameterCount(1);
         }
 
-        private static OperationResult DoOutput(Instruction op)
+        private static async ValueTask<OperationResult> DoOutput(Instruction op)
         {
             var value = op.ReadArgument(0);
-            op.WriteOutput(value);
+
+            await op.WriteOutput(value);
 
             return OperationResult.FromParameterCount(1);
         }
 
-        private static OperationResult DoConditionalJump(Instruction op, Predicate<int> condition)
+        private static ValueTask<OperationResult> DoConditionalJump(Instruction op, Predicate<int> condition)
         {
             var value = op.ReadArgument(0);
-            return condition(value)
+            var result = condition(value)
                 ? OperationResult.JumpTo(op.ReadArgument(1))
                 : OperationResult.FromParameterCount(2);
+
+            return new ValueTask<OperationResult>(result);
         }
 
         private sealed class State
         {
-            public State(int[] memory, Action<int> write = null, Func<int> read = null)
+            public State(int[] memory, Func<int, Task> write = null, Func<Task<int>> read = null)
             {
                 Memory = memory;
-                Write = write ?? (_ => { });
+                Write = write ?? (_ => Task.CompletedTask);
                 Read = read ?? (() => throw new InvalidOperationException("No input available"));
             }
 
             public int[] Memory { get; }
 
-            public Action<int> Write { get; }
+            public Func<int, Task> Write { get; }
 
-            public Func<int> Read { get; }
+            public Func<Task<int>> Read { get; }
         }
 
         readonly struct Instruction
@@ -177,9 +170,9 @@ namespace day07
                 Memory[address] = value;
             }
 
-            public void WriteOutput(int output) => state.Write(output);
+            public Task WriteOutput(int output) => state.Write(output);
 
-            public int ReadInput() => state.Read();
+            public Task<int> ReadInput() => state.Read();
         }
 
         private readonly struct OperationResult
