@@ -7,8 +7,6 @@ namespace day10
 {
     class Program
     {
-        const int Digits = 3;
-
         static void Main(string[] args)
         {
             if (args.Any())
@@ -18,6 +16,19 @@ namespace day10
                 // Part 1
                 var best = FindBestAsteroid(points);
                 Console.WriteLine($"Best is {best.point.x},{best.point.y} with {best.visible} other asteroids detected");
+
+                // Part 2
+                var vaporizationOrder = from g in GroupByDirection(best.point, points)
+                                        from p in SortByDistance(best.point, g).Select((p, i) => new { Point = p, Index = i })
+                                        orderby p.Index, g.Key
+                                        select p.Point;
+
+                var count = 0;
+                foreach (var item in vaporizationOrder)
+                    Console.WriteLine($"The #{++count} asteroid to be vaporized is at {item}");
+
+                var desiredPoint = vaporizationOrder.Skip(199).First();
+                Console.WriteLine($"The 200th Point is: {desiredPoint}, Answer = {desiredPoint.x * 100 + desiredPoint.y}");
             }
             else
             {
@@ -25,30 +36,29 @@ namespace day10
             }
         }
 
-        private static ((decimal x, decimal y) point, int visible) FindBestAsteroid(IEnumerable<(decimal x, decimal y)> map)
+        private static ((double x, double y) point, int visible) FindBestAsteroid(IEnumerable<(double x, double y)> map)
+            => (from p in map
+                let visible = GroupByDirection(p, map).Count()
+                orderby visible descending
+                select (p, visible)).First();
+
+        private static IEnumerable<IGrouping<double, (double x, double y)>> GroupByDirection(
+            (double x, double y) vantagePoint,
+            IEnumerable<(double x, double y)> map)
+            => from p in map.Where(p => p != vantagePoint)
+               let direction = CalculateDirection(vantagePoint, p)
+               group p by direction into g
+               select g;
+
+        private static IEnumerable<(double x, double y)> SortByDistance(
+            (double x, double y) vantagePoint,
+            IEnumerable<(double x, double y)> points)
+            => from p in points
+               orderby CalculateLength(p.x - vantagePoint.x, p.y - vantagePoint.y)
+               select p;
+
+        private static IEnumerable<(double x, double y)> ParseAsteroidMap(IEnumerable<string> map)
         {
-            // calculate all of the unique directions in which we can see an asteroid
-            var directions = from p in map
-                             let visible = CountLineOfSightAsteroids(p, map)
-                             orderby visible descending
-                             select new { Point = p, Visble = visible };
-
-            // return the best one
-            return directions.Select(x => (x.Point, x.Visble)).First();
-        }
-
-        private static int CountLineOfSightAsteroids((decimal x, decimal y) vantagePoint, IEnumerable<(decimal x, decimal y)> map)
-        {
-            return map.Where(p => p != vantagePoint)
-                .Select(p => CalculateDirection(vantagePoint, p))
-                .Distinct()
-                .Count();
-        }
-
-        private static IEnumerable<(decimal x, decimal y)> ParseAsteroidMap(IEnumerable<string> map)
-        {
-            Console.WriteLine(map.Count());
-
             var y = 0;
             foreach (var row in map)
             {
@@ -62,18 +72,18 @@ namespace day10
             }
         }
 
-        private static (decimal dx, decimal dy) CalculateDirection((decimal x, decimal y) from, (decimal x, decimal y) to)
+        private static double CalculateDirection((double x, double y) from, (double x, double y) to)
         {
             var (dx, dy) = (to.x - from.x, to.y - from.y);
-            var length = CalculateLength(dx, dy);
-            return (Round(dx / length), Round(dy / length));
+            var angle = Math.Atan2(dx, -dy);
+            while (angle < 0)
+                angle += 2 * Math.PI;
+
+            return angle;
         }
 
-        private static decimal CalculateLength(decimal dx, decimal dy)
-            => (decimal)Math.Sqrt((double)(dx * dx + dy * dy));
-
-        private static decimal Round(decimal value)
-            => Math.Round(value, Digits);
+        private static double CalculateLength(double dx, double dy)
+            => (double)Math.Sqrt((double)(dx * dx + dy * dy));
 
         private static void RunExamples()
         {
