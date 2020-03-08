@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Channels;
@@ -19,17 +20,32 @@ namespace day07
                 .ToArray();
 
             // Part 1
+            var clock = new Stopwatch();
+            clock.Start();
+
             var maxThrustValue = EnumAllPermutations(Enumerable.Range(0, 5))
                 .Max(x => CalculateOutputSignal(x, program));
 
+            clock.Stop();
+
             Console.WriteLine($"Part 1 Result: {maxThrustValue}");
+            Console.WriteLine($"Time = {clock.ElapsedMilliseconds:#,##0}ms");
+            Console.WriteLine();
 
             // Part 2
+            clock.Reset();
+            clock.Start();
+
             var maxFeedbackThrustValue = await EnumAllPermutations(Enumerable.Range(5, 5))
                 .ToAsyncEnumerable()
                 .MaxAwaitAsync(x => CalculateOutputSignalWithFeedbackAsync(x, program));
 
+            clock.Stop();
+
             Console.WriteLine($"Part 2 Result: {maxFeedbackThrustValue}");
+
+            Console.WriteLine($"Time = {clock.ElapsedMilliseconds:#,##0}ms");
+            Console.WriteLine();
         }
 
         private static int CalculateOutputSignal(IEnumerable<int> phaseSettingInputs, int[] program)
@@ -64,7 +80,7 @@ namespace day07
 
         private static async Task<Channel<int>> CreateAmplifierInputChannel(int phase)
         {
-            var result = Channel.CreateUnbounded<int>();
+            var result = Channel.CreateUnbounded<int>(new UnboundedChannelOptions { AllowSynchronousContinuations = true });
             await result.Writer.WriteAsync(phase);
             return result;
         }

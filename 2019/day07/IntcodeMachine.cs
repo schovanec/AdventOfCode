@@ -1,5 +1,4 @@
 using System;
-using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -52,7 +51,7 @@ namespace day07
                 throw new ArgumentNullException(nameof(input));
 
             // set up the input
-            var inputChannel = Channel.CreateUnbounded<int>();
+            var inputChannel = Channel.CreateUnbounded<int>(new UnboundedChannelOptions { AllowSynchronousContinuations = true });
             foreach (var value in input)
                 await inputChannel.Writer.WriteAsync(value);
 
