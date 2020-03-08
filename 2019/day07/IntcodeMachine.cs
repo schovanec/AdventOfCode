@@ -19,7 +19,7 @@ namespace day07
 
         private IntcodeMachine(ReadOnlySpan<int> program, ChannelReader<int> input, ChannelWriter<int> output)
         {
-            this.memory = program?.ToArray() ?? throw new ArgumentNullException(nameof(program));
+            this.memory = program.ToArray();
             this.input = input ?? throw new ArgumentNullException(nameof(input));
             this.output = output ?? throw new ArgumentNullException(nameof(output));
         }
