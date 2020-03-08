@@ -9,62 +9,96 @@ namespace day09
 {
     public sealed class IntcodeMachine
     {
-        private readonly int[] memory;
-        private readonly ChannelReader<int> input;
-        private readonly ChannelWriter<int> output;
-        private int programCounter = 0;
+        private readonly long[] memory;
+        private readonly Func<CancellationToken, ValueTask<long>> readInput;
+        private readonly Func<long, CancellationToken, ValueTask> writeOutput;
+        private long programCounter = 0;
+        private long relativeBaseAddress = 0;
 
-        private const int FlagStart = 100;
+        public const int DefaultMemorySize = 1 << 12;
 
-        private IntcodeMachine(ReadOnlySpan<int> program, ChannelReader<int> input, ChannelWriter<int> output)
+        private const string ErrorNoInput = "Input stream ended";
+
+        private const long FlagStart = 100;
+
+        private IntcodeMachine(
+            ReadOnlySpan<long> program,
+            Func<CancellationToken, ValueTask<long>> readInput = null,
+            Func<long, CancellationToken, ValueTask> writeOutput = null,
+            int memorySize = DefaultMemorySize)
         {
-            this.memory = program.ToArray();
-            this.input = input ?? throw new ArgumentNullException(nameof(input));
-            this.output = output ?? throw new ArgumentNullException(nameof(output));
+            this.memory = new long[Math.Max(program.Length, memorySize)];
+            program.CopyTo(memory);
+
+            this.readInput = readInput ?? (t => throw new InvalidOperationException(ErrorNoInput));
+            this.writeOutput = writeOutput ?? ((v, t) => default(ValueTask));
         }
+
+        public static long[] ParseCode(string code)
+            => (code ?? throw new ArgumentNullException(nameof(code))).Split(',').Select(long.Parse).ToArray();
+
+        // public static async Task RunProgramAsync(
+        //     long[] program, ChannelReader<long> input, ChannelWriter<long> output,
+        //     CancellationToken cancellationToken = default, bool complete = true)
+        // {
+        //     try
+        //     {
+        //         await RunProgramAsync(program, input.ReadAsync, output.WriteAsync, cancellationToken);
+        //     }
+        //     catch (Exception ex)
+        //     {
+        //         if (complete)
+        //             output.TryComplete(ex);
+        //     }
+        //     finally
+        //     {
+        //         if (complete)
+        //             output.TryComplete();
+        //     }
+        // }
 
         public static async Task RunProgramAsync(
-            int[] program, ChannelReader<int> input, ChannelWriter<int> output,
-            CancellationToken cancellationToken = default, bool complete = true)
+            long[] program,
+            Func<CancellationToken, ValueTask<long>> read,
+            Func<long, CancellationToken, ValueTask> write,
+            CancellationToken cancellationToken = default)
         {
-            try
-            {
-                var vm = new IntcodeMachine(program, input, output);
-                await vm.StepUntilHalted(cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                if (complete)
-                    output.TryComplete(ex);
-            }
-            finally
-            {
-                if (complete)
-                    output.TryComplete();
-            }
+            var vm = new IntcodeMachine(program, read, write);
+            await vm.StepUntilHalted(cancellationToken);
         }
 
-        public static async Task<List<int>> RunProgramAsync(
-            int[] program, IEnumerable<int> input, CancellationToken cancellationToken = default)
+        public static Task RunProgramAsync(
+            long[] program,
+            Func<long> read,
+            Action<long> write,
+            CancellationToken cancellationToken = default)
         {
-            if (input == null)
-                throw new ArgumentNullException(nameof(input));
-
-            // set up the input
-            var inputChannel = Channel.CreateUnbounded<int>(new UnboundedChannelOptions { AllowSynchronousContinuations = true });
-            foreach (var value in input)
-                await inputChannel.Writer.WriteAsync(value);
-
-            // run the program and capture output
-            var outputChannel = Channel.CreateUnbounded<int>();
-            await RunProgramAsync(program, inputChannel.Reader, outputChannel.Writer, cancellationToken);
-
-            // read all of the output
-            outputChannel.Writer.TryComplete();
-            return await outputChannel.Reader.ReadAllAsync().ToListAsync();
+            return RunProgramAsync(
+                program,
+                _ => new ValueTask<long>(read()),
+                (v, _) => { write(v); return default; },
+                cancellationToken);
         }
 
-        public static List<int> RunProgram(int[] program, IEnumerable<int> input, CancellationToken cancellationToken = default)
+        public static void RunProgram(long[] program, Func<long> read, Action<long> write)
+            => RunProgramAsync(program, read, write).Wait();
+
+        public static async Task<List<long>> RunProgramAsync(
+            long[] program, IEnumerable<long> input, CancellationToken cancellationToken = default)
+        {
+            using var stream = input?.GetEnumerator() ?? throw new ArgumentNullException(nameof(input));
+            var output = new List<long>();
+            await RunProgramAsync(
+                program,
+                () => stream.MoveNext() ? stream.Current : throw new InvalidOperationException(),
+                output.Add,
+                cancellationToken
+            );
+
+            return output;
+        }
+
+        public static List<long> RunProgram(long[] program, IEnumerable<long> input, CancellationToken cancellationToken = default)
             => RunProgramAsync(program, input, cancellationToken).Result;
 
         public bool IsHalted => CurrentInstruction == Instruction.Halt;
@@ -107,6 +141,9 @@ namespace day09
                 case Instruction.CompareEqual:
                     return DoBinaryInstruction((x, y) => x == y ? 1 : 0);
 
+                case Instruction.OffsetRelativeBase:
+                    return DoOffsetRelativeBase();
+
                 case Instruction.Halt:
                     return default;
 
@@ -115,50 +152,58 @@ namespace day09
             }
         }
 
-        private ValueTask DoBinaryInstruction(Func<int, int, int> func)
+        private ValueTask DoBinaryInstruction(Func<long, long, long> func)
         {
-            var a = GetParameterValue(1);
-            var b = GetParameterValue(2);
+            var a = GetParameter(1);
+            var b = GetParameter(2);
 
             var result = func(a, b);
 
-            var address = GetParameterRaw(3);
-            memory[address] = result;
+            ref var target = ref GetParameter(3);
+            target = result;
 
             programCounter += 4;
 
             return default;
         }
 
-        private ValueTask DoConditionalJump(Predicate<int> condition)
+        private ValueTask DoConditionalJump(Predicate<long> condition)
         {
-            var a = GetParameterValue(1);
+            var a = GetParameter(1);
 
             if (condition(a))
-                programCounter = GetParameterValue(2);
+                programCounter = GetParameter(2);
             else
                 programCounter += 3;
 
             return default;
         }
 
+        private ValueTask DoOffsetRelativeBase()
+        {
+            relativeBaseAddress += GetParameter(1);
+            programCounter += 2;
+            return default;
+        }
+
         private async ValueTask ReadInput(CancellationToken cancellationToken)
         {
-            if (input == null)
-                throw new InvalidOperationException("No input available");
+            var inputValue = await readInput(cancellationToken);
 
-            var inputValue = await input.ReadAsync(cancellationToken);
+            void WriteOutput(long value)
+            {
+                ref var target = ref GetParameter(1);
+                target = inputValue;
+            }
 
-            var address = GetParameterRaw(1);
-            memory[address] = inputValue;
-
+            WriteOutput(inputValue);
             programCounter += 2;
         }
 
         private async ValueTask WriteOutput(CancellationToken cancellationToken)
         {
-            var outputValue = GetParameterValue(1);
-            await output.WriteAsync(outputValue, cancellationToken);
+            var outputValue = GetParameter(1);
+            await writeOutput(outputValue, cancellationToken);
 
             programCounter += 2;
         }
@@ -166,23 +211,35 @@ namespace day09
         private Instruction CurrentInstruction
             => (Instruction)(memory[programCounter] % FlagStart);
 
-        private int GetParameterValue(int index)
-            => GetParameterMode(index) switch
+        private ref long GetParameter(long index)
+        {
+            ref var parameter = ref memory[programCounter + index];
+            switch (GetParameterMode(index))
             {
-                Mode.Immediate => GetParameterRaw(index),
-                Mode.Relative => memory[GetParameterRaw(index)],
-                _ => throw new InvalidOperationException("Invalid perameter mode")
+                case Mode.Immediate:
+                    return ref parameter;
+
+                case Mode.Indirect:
+                    return ref memory[parameter];
+
+                case Mode.Relative:
+                    return ref memory[relativeBaseAddress + parameter];
+
+                default:
+                    throw new InvalidOperationException("Invalid parameter mode");
+            }
+        }
+
+        private Mode GetParameterMode(long index)
+            => GetParameterFlags(index) switch
+            {
+                0 => Mode.Indirect,
+                1 => Mode.Immediate,
+                2 => Mode.Relative,
+                _ => throw new InvalidOperationException("Invalid paramter flags")
             };
 
-        private int GetParameterRaw(int index)
-            => memory[programCounter + index];
-
-        private Mode GetParameterMode(int index)
-            => GetParameterFlags(index) == 1
-                ? Mode.Immediate
-                : Mode.Relative;
-
-        private int GetParameterFlags(int index)
+        private long GetParameterFlags(long index)
             => index switch
             {
                 1 => (memory[programCounter] / (FlagStart * 1)) % 10,
@@ -201,12 +258,14 @@ namespace day09
             JumpIfFalse = 6,
             CompareLess = 7,
             CompareEqual = 8,
+            OffsetRelativeBase = 9,
             Halt = 99
         }
 
         private enum Mode
         {
             Immediate,
+            Indirect,
             Relative
         }
     }
