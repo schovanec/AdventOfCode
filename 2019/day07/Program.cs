@@ -16,19 +16,16 @@ namespace day07
             {
                 var program = File.ReadLines(args.First()).First().Split(',').Select(int.Parse).ToArray();
 
+                // Part 1
                 var maxThrustValue = EnumAllPermutations(Enumerable.Range(0, 5))
-                    .Select(x => CalculateOutputSignals(x, program))
-                    .Max(x => x.Last());
+                    .Max(x => CalculateOutputSignal(x, program));
 
                 Console.WriteLine($"Part 1 Result: {maxThrustValue}");
 
-                var maxFeedbackThrustValue = default(int?);
-                foreach (var perm in EnumAllPermutations(Enumerable.Range(5, 5)))
-                {
-                    var thrustValue = await CalculateOutputSignalWithFeedback(perm, program);
-                    if (!maxFeedbackThrustValue.HasValue || thrustValue > maxFeedbackThrustValue)
-                        maxFeedbackThrustValue = thrustValue;
-                }
+                // Part 2
+                var maxFeedbackThrustValue = await EnumAllPermutations(Enumerable.Range(5, 5))
+                    .ToAsyncEnumerable()
+                    .MaxAwaitAsync(x => CalculateOutputSignalWithFeedbackAsync(x, program));
 
                 Console.WriteLine($"Part 2 Result: {maxFeedbackThrustValue}");
             }
@@ -69,17 +66,13 @@ namespace day07
             {
                 Console.WriteLine($"Test #{++counter}");
 
-                var outputs = CalculateOutputSignals(test.Inputs, test.Program).ToArray();
-                Console.WriteLine($"Results: {string.Join(", ", outputs)}");
-
-                var result = outputs.Last();
+                var result = CalculateOutputSignal(test.Inputs, test.Program);
                 Console.WriteLine($"Expected: {test.ExpectedResult} [{(result == test.ExpectedResult ? "Ok" : "Fail")}]");
                 Console.WriteLine();
             }
 
             return Task.CompletedTask;
         }
-
         private static async Task RunFeedbackTests()
         {
             var tests = new[]
@@ -103,103 +96,48 @@ namespace day07
             {
                 Console.WriteLine($"Test #{++counter}");
 
-                var result = await CalculateOutputSignalWithFeedback(test.Inputs, test.Program);
+                var result = await CalculateOutputSignalWithFeedbackAsync(test.Inputs, test.Program);
                 Console.WriteLine($"Result: {result}");
                 Console.WriteLine($"Expected: {test.ExpectedResult} [{(result == test.ExpectedResult ? "Ok" : "Fail")}]");
                 Console.WriteLine();
             }
         }
 
-        private static IEnumerable<int> CalculateOutputSignals(IEnumerable<int> phaseSettingInputs, IEnumerable<int> program)
+        private static int CalculateOutputSignal(IEnumerable<int> phaseSettingInputs, int[] program)
+            => phaseSettingInputs.Aggregate(0, (prev, phase) => Machine.RunProgram(program, new[] { phase, prev }).Single());
+
+        private static async ValueTask<int> CalculateOutputSignalWithFeedbackAsync(IEnumerable<int> phaseSettingInputs, int[] program)
         {
-            var lastSignalValue = 0;
-            foreach (var phaseValue in phaseSettingInputs)
-            {
-                var outputs = new List<int>();
-
-                var inputs = new Queue<int>();
-                inputs.Enqueue(phaseValue);
-                inputs.Enqueue(lastSignalValue);
-
-                var machine = new Machine(program);
-                machine.Execute(
-                    read: () => inputs.Dequeue(),
-                    write: outputs.Add);
-
-                lastSignalValue = outputs.Single();
-                yield return lastSignalValue;
-            }
-        }
-
-        private static async Task<int> CalculateOutputSignalWithFeedback(IEnumerable<int> phaseSettingInputs, IEnumerable<int> program, bool debug = false)
-        {
-            var phaseSettings = phaseSettingInputs.ToArray();
-            var channels = phaseSettings.Select(_ => Channel.CreateUnbounded<int>()).ToArray();
-
-            var programs = new List<Task>();
-            var count = phaseSettings.Length;
+            var channel = await Task.WhenAll(phaseSettingInputs.Select(CreateAmplifierInputChannel));
+            var count = channel.Length;
+            var amp = new Task[count];
             for (int i = 0; i < count; ++i)
             {
-                var phase = phaseSettings[i];
-                var input = channels[i];
-                var output = channels[(i + 1) % count];
+                // get this amplifier's input
+                var input = channel[i];
 
-                // write initial input
-                await input.Writer.WriteAsync(phase);
+                // connect the output to the next amplifier's input
+                var output = channel[(i + 1) % channel.Length];
 
-                // start program
-                var id = i;
-                programs.Add(ExecuteProgramAsync(
-                    program,
-                    input.Reader,
-                    output.Writer,
-                    debug ? x => Console.WriteLine($"[{id}] <== {x}") : default(Action<int>),
-                    debug ? x => Console.WriteLine($"[{id}] ==> {x}") : default(Action<int>)));
+                // run the program
+                amp[i] = Machine.RunProgramAsync(program, input.Reader, output.Writer);
             }
 
-            // Write initial input to fist program
-            await channels[0].Writer.WriteAsync(0);
+            // send initial input to the first amp
+            await channel.First().Writer.WriteAsync(0);
 
-            // Wait for all of the programs to halt
-            await Task.WhenAll(programs);
+            // wait for all of the programs to finish
+            await Task.WhenAll(amp);
 
-            // Get the last output, which will be written to the first channel
-            return await channels.First().Reader.ReadAsync();
+            // retrieve the final output from the input of the first amp
+            return await channel.First().Reader.ReadAsync();
         }
 
-        private static async Task ExecuteProgramAsync(
-            IEnumerable<int> program,
-            ChannelReader<int> input, ChannelWriter<int> output,
-            Action<int> inputWatcher = null, Action<int> outputWatcher = null)
+        private static async Task<Channel<int>> CreateAmplifierInputChannel(int phase)
         {
-            try
-            {
-                Func<Task<int>> reader = async () =>
-                {
-                    var result = await input.ReadAsync();
-                    if (inputWatcher != null)
-                        inputWatcher(result);
-
-                    return result;
-                };
-
-                Func<int, Task> writer = async x =>
-                {
-                    if (outputWatcher != null)
-                        outputWatcher(x);
-
-                    await output.WriteAsync(x);
-                };
-
-                var machine = new Machine(program);
-                await machine.ExecuteAsync(reader, writer);
-
-                output.Complete();
-            }
-            catch (Exception ex)
-            {
-                output.Complete(ex);
-            }
+            var result = Channel.CreateUnbounded<int>();
+            await result.Writer.WriteAsync(phase);
+            return result;
         }
 
         private static IEnumerable<ImmutableArray<int>> EnumAllPermutations(IEnumerable<int> source)
