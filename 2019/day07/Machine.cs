@@ -1,208 +1,248 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
+using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 
 namespace day07
 {
-    public sealed class Machine
+    public sealed class Machine : IDisposable
     {
-        private readonly int[] memory;
+        bool disposed = false;
 
-        public Machine(IEnumerable<int> memory)
+        private int[] memory;
+
+        private readonly ChannelReader<int> input;
+
+        private readonly ChannelWriter<int> output;
+
+        private int programCounter = 0;
+
+        private const int InstructionLimit = 100;
+
+        private Machine(ReadOnlySpan<int> program, ChannelReader<int> input, ChannelWriter<int> output)
         {
-            this.memory = memory.ToArray();
+            if (program == null)
+                throw new ArgumentNullException(nameof(memory));
+
+            this.input = input ?? throw new ArgumentNullException(nameof(input));
+            this.output = output ?? throw new ArgumentNullException(nameof(output));
+
+            this.memory = ArrayPool<int>.Shared.Rent(program.Length);
+            program.CopyTo(this.memory);
         }
 
-        public int ProgramCounter { get; set; }
-
-        public int this[int address] => memory[address];
-
-        public ReadOnlyMemory<int> Memory => memory.AsMemory();
-
-        public void Execute(Func<int> read = null, Action<int> write = null)
+        ~Machine()
         {
-            Func<Task<int>> reader = null;
-            if (read != null)
-                reader = () => Task.FromResult(read());
-
-            Func<int, Task> writer = null;
-            if (write != null)
-                writer = x => { write(x); return Task.CompletedTask; };
-
-            ExecuteAsync(reader, writer)
-                .AsTask()
-                .Wait();
+            Dispose();
         }
 
-        public async ValueTask ExecuteAsync(Func<Task<int>> read = null, Func<int, Task> write = null)
+        public void Dispose()
         {
-            var state = new State(memory, write, read);
-
-            while (true)
+            if (!disposed)
             {
-                var op = new Instruction(state, ProgramCounter);
-                var handler = GetHandler(op);
+                ArrayPool<int>.Shared.Return(memory);
+                disposed = true;
+                memory = null;
 
-                var result = await handler(op);
-                if (result.IsHalt)
-                    break;
-
-                ProgramCounter = result.GetNextAddress(ProgramCounter);
+                GC.SuppressFinalize(this);
             }
         }
 
-        private static Func<Instruction, ValueTask<OperationResult>> GetHandler(Instruction op)
-            => op.OpCode switch
+        public static async Task RunProgramAsync(
+            int[] program, ChannelReader<int> input, ChannelWriter<int> output,
+            CancellationToken cancellationToken = default, bool complete = true)
+        {
+            try
             {
-                1 => op => DoBinaryOperation(op, (a, b) => a + b),
-                2 => op => DoBinaryOperation(op, (a, b) => a * b),
-                3 => DoInput,
-                4 => DoOutput,
-                5 => op => DoConditionalJump(op, x => x != 0),
-                6 => op => DoConditionalJump(op, x => x == 0),
-                7 => op => DoBinaryOperation(op, (a, b) => a < b ? 1 : 0),
-                8 => op => DoBinaryOperation(op, (a, b) => a == b ? 1 : 0),
-                99 => _ => new ValueTask<OperationResult>(OperationResult.Halt),
-                _ => throw new InvalidOperationException("Invalid instruction")
+                using var vm = new Machine(program, input, output);
+                await vm.StepUntilHalted(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                if (complete)
+                    output.TryComplete(ex);
+            }
+            finally
+            {
+                if (complete)
+                    output.TryComplete();
+            }
+        }
+
+        public static async Task<List<int>> RunProgramAsync(
+            int[] program, IEnumerable<int> input, CancellationToken cancellationToken = default)
+        {
+            if (input == null)
+                throw new ArgumentNullException(nameof(input));
+
+            var inputChannel = Channel.CreateUnbounded<int>();
+            var outputChannel = Channel.CreateUnbounded<int>();
+            var task = RunProgramAsync(program, inputChannel.Reader, outputChannel.Writer, cancellationToken);
+
+            // send all input
+            foreach (var value in input)
+                await inputChannel.Writer.WriteAsync(value);
+
+            // wait for the program to complete
+            await task;
+
+            // read all of the output
+            outputChannel.Writer.TryComplete();
+            return await outputChannel.Reader.ReadAllAsync().ToListAsync();
+        }
+
+        public static List<int> RunProgram(int[] program, IEnumerable<int> input, CancellationToken cancellationToken = default)
+            => RunProgramAsync(program, input, cancellationToken).Result;
+
+        public bool IsHalted => CurrentInstruction == Instruction.Halt;
+
+        private async ValueTask StepUntilHalted(CancellationToken cancellationToken = default)
+        {
+            if (disposed)
+                throw new ObjectDisposedException(nameof(Machine));
+
+            while (!IsHalted)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await Step(cancellationToken);
+            }
+        }
+
+        public ValueTask Step(CancellationToken cancellationToken = default)
+        {
+            if (disposed)
+                throw new ObjectDisposedException(nameof(Machine));
+
+            switch (CurrentInstruction)
+            {
+                case Instruction.Add:
+                    return DoBinaryInstruction((x, y) => x + y);
+
+                case Instruction.Multiply:
+                    return DoBinaryInstruction((x, y) => x * y);
+
+                case Instruction.ReadInput:
+                    return ReadInput(cancellationToken);
+
+                case Instruction.WriteOutput:
+                    return WriteOutput(cancellationToken);
+
+                case Instruction.JumpIfTrue:
+                    return DoConditionalJump(x => x != 0);
+
+                case Instruction.JumpIfFalse:
+                    return DoConditionalJump(x => x == 0);
+
+                case Instruction.CompareLess:
+                    return DoBinaryInstruction((x, y) => x < y ? 1 : 0);
+
+                case Instruction.CompareEqual:
+                    return DoBinaryInstruction((x, y) => x == y ? 1 : 0);
+
+                case Instruction.Halt:
+                    return default;
+
+                default:
+                    throw new InvalidOperationException("Unknown instruction");
+            }
+        }
+
+        private ValueTask DoBinaryInstruction(Func<int, int, int> func)
+        {
+            var a = GetParameterValue(1);
+            var b = GetParameterValue(2);
+
+            var result = func(a, b);
+
+            var address = GetParameterRaw(3);
+            memory[address] = result;
+
+            programCounter += 4;
+
+            return default;
+        }
+
+        private ValueTask DoConditionalJump(Predicate<int> condition)
+        {
+            var a = GetParameterValue(1);
+
+            if (condition(a))
+                programCounter = GetParameterValue(2);
+            else
+                programCounter += 3;
+
+            return default;
+        }
+
+        private async ValueTask ReadInput(CancellationToken cancellationToken)
+        {
+            if (input == null)
+                throw new InvalidOperationException("No input available");
+
+            var inputValue = await input.ReadAsync(cancellationToken);
+
+            var address = GetParameterRaw(1);
+            memory[address] = inputValue;
+
+            programCounter += 2;
+        }
+
+        private async ValueTask WriteOutput(CancellationToken cancellationToken)
+        {
+            var outputValue = GetParameterValue(1);
+            await output.WriteAsync(outputValue, cancellationToken);
+
+            programCounter += 2;
+        }
+
+        private Instruction CurrentInstruction
+            => (Instruction)(memory[programCounter] % InstructionLimit);
+
+        private int GetParameterValue(int index)
+            => GetParameterMode(index) switch
+            {
+                Mode.Immediate => GetParameterRaw(index),
+                Mode.Relative => memory[GetParameterRaw(index)],
+                _ => throw new InvalidOperationException("Invalid perameter mode")
             };
 
-        private static ValueTask<OperationResult> DoBinaryOperation(Instruction op, Func<int, int, int> func)
+        private int GetParameterRaw(int index)
+            => memory[programCounter + index];
+
+        private Mode GetParameterMode(int index)
+            => GetParameterFlags(index) == 1
+                ? Mode.Immediate
+                : Mode.Relative;
+
+        private int GetParameterFlags(int index)
+            => index switch
+            {
+                1 => (memory[programCounter] / (InstructionLimit * 1)) % 10,
+                2 => (memory[programCounter] / (InstructionLimit * 10)) % 10,
+                3 => (memory[programCounter] / (InstructionLimit * 100)) % 10,
+                _ => throw new ArgumentOutOfRangeException(nameof(index), index, "Invalid parameter index")
+            };
+
+        private enum Instruction
         {
-            var result = func(op.ReadArgument(0), op.ReadArgument(1));
-            op.WriteResult(2, result);
-            return new ValueTask<OperationResult>(OperationResult.FromParameterCount(3));
+            Add = 1,
+            Multiply = 2,
+            ReadInput = 3,
+            WriteOutput = 4,
+            JumpIfTrue = 5,
+            JumpIfFalse = 6,
+            CompareLess = 7,
+            CompareEqual = 8,
+            Halt = 99
         }
 
-        private static async ValueTask<OperationResult> DoInput(Instruction op)
+        private enum Mode
         {
-            var value = await op.ReadInput();
-            op.WriteResult(0, value);
-
-            return OperationResult.FromParameterCount(1);
-        }
-
-        private static async ValueTask<OperationResult> DoOutput(Instruction op)
-        {
-            var value = op.ReadArgument(0);
-
-            await op.WriteOutput(value);
-
-            return OperationResult.FromParameterCount(1);
-        }
-
-        private static ValueTask<OperationResult> DoConditionalJump(Instruction op, Predicate<int> condition)
-        {
-            var value = op.ReadArgument(0);
-            var result = condition(value)
-                ? OperationResult.JumpTo(op.ReadArgument(1))
-                : OperationResult.FromParameterCount(2);
-
-            return new ValueTask<OperationResult>(result);
-        }
-
-        private sealed class State
-        {
-            public State(int[] memory, Func<int, Task> write = null, Func<Task<int>> read = null)
-            {
-                Memory = memory;
-                Write = write ?? (_ => Task.CompletedTask);
-                Read = read ?? (() => throw new InvalidOperationException("No input available"));
-            }
-
-            public int[] Memory { get; }
-
-            public Func<int, Task> Write { get; }
-
-            public Func<Task<int>> Read { get; }
-        }
-
-        readonly struct Instruction
-        {
-            private const int OpcodeLimit = 100;
-
-            private readonly State state;
-
-            private readonly int ip;
-
-            public Instruction(State state, int ip)
-            {
-                this.state = state;
-                this.ip = ip;
-            }
-
-            private int[] Memory => state.Memory;
-
-            public int OpCode => Memory[ip] % OpcodeLimit;
-
-            public int ReadArgument(int argumentOffset)
-            {
-                if (argumentOffset < 0)
-                    throw new ArgumentOutOfRangeException(nameof(argumentOffset));
-
-                var value = Memory[ip + argumentOffset + 1];
-                return IsImmediate(argumentOffset)
-                    ? value
-                    : Memory[value];
-            }
-
-            private bool IsImmediate(int argumentOffset)
-            {
-                var digit = argumentOffset switch
-                {
-                    0 => OpcodeLimit,
-                    1 => OpcodeLimit * 10,
-                    2 => OpcodeLimit * 100,
-                    3 => OpcodeLimit * 1000,
-                    _ => throw new ArgumentException("Invalid Argument", nameof(argumentOffset))
-                };
-
-                return ((Memory[ip] / digit) % 10) == 1;
-            }
-
-            public void WriteResult(int argumentOffset, int value)
-            {
-                if (argumentOffset < 0)
-                    throw new ArgumentOutOfRangeException(nameof(argumentOffset));
-
-                var address = Memory[ip + argumentOffset + 1];
-                Memory[address] = value;
-            }
-
-            public Task WriteOutput(int output) => state.Write(output);
-
-            public Task<int> ReadInput() => state.Read();
-        }
-
-        private readonly struct OperationResult
-        {
-            public static readonly OperationResult Halt = new OperationResult(-1, true);
-
-            public OperationResult(int address, bool isAbsolute = false)
-            {
-                Address = address;
-                IsAbsolute = isAbsolute;
-            }
-
-            public int Address { get; }
-
-            public bool IsAbsolute { get; }
-
-            public bool IsHalt => IsAbsolute && Address < 0;
-
-            public int GetNextAddress(int currentAddress)
-                => IsAbsolute ? Address : (currentAddress + Address);
-
-            public static OperationResult FromParameterCount(int count)
-                => count >= 0
-                    ? new OperationResult(1 + count)
-                    : throw new ArgumentOutOfRangeException(nameof(count));
-
-            public static OperationResult JumpTo(int address)
-                => address >= 0
-                    ? new OperationResult(address, true)
-                    : throw new ArgumentOutOfRangeException(nameof(address));
+            Immediate,
+            Relative
         }
     }
 }
