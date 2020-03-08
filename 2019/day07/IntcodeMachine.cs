@@ -8,47 +8,20 @@ using System.Threading.Tasks;
 
 namespace day07
 {
-    public sealed class Machine : IDisposable
+    public sealed class IntcodeMachine
     {
-        bool disposed = false;
-
-        private int[] memory;
-
+        private readonly int[] memory;
         private readonly ChannelReader<int> input;
-
         private readonly ChannelWriter<int> output;
-
         private int programCounter = 0;
 
-        private const int InstructionLimit = 100;
+        private const int FlagStart = 100;
 
-        private Machine(ReadOnlySpan<int> program, ChannelReader<int> input, ChannelWriter<int> output)
+        private IntcodeMachine(ReadOnlySpan<int> program, ChannelReader<int> input, ChannelWriter<int> output)
         {
-            if (program == null)
-                throw new ArgumentNullException(nameof(memory));
-
+            this.memory = program?.ToArray() ?? throw new ArgumentNullException(nameof(program));
             this.input = input ?? throw new ArgumentNullException(nameof(input));
             this.output = output ?? throw new ArgumentNullException(nameof(output));
-
-            this.memory = ArrayPool<int>.Shared.Rent(program.Length);
-            program.CopyTo(this.memory);
-        }
-
-        ~Machine()
-        {
-            Dispose();
-        }
-
-        public void Dispose()
-        {
-            if (!disposed)
-            {
-                ArrayPool<int>.Shared.Return(memory);
-                disposed = true;
-                memory = null;
-
-                GC.SuppressFinalize(this);
-            }
         }
 
         public static async Task RunProgramAsync(
@@ -57,7 +30,7 @@ namespace day07
         {
             try
             {
-                using var vm = new Machine(program, input, output);
+                var vm = new IntcodeMachine(program, input, output);
                 await vm.StepUntilHalted(cancellationToken);
             }
             catch (Exception ex)
@@ -78,16 +51,14 @@ namespace day07
             if (input == null)
                 throw new ArgumentNullException(nameof(input));
 
+            // set up the input
             var inputChannel = Channel.CreateUnbounded<int>();
-            var outputChannel = Channel.CreateUnbounded<int>();
-            var task = RunProgramAsync(program, inputChannel.Reader, outputChannel.Writer, cancellationToken);
-
-            // send all input
             foreach (var value in input)
                 await inputChannel.Writer.WriteAsync(value);
 
-            // wait for the program to complete
-            await task;
+            // run the program and capture output
+            var outputChannel = Channel.CreateUnbounded<int>();
+            await RunProgramAsync(program, inputChannel.Reader, outputChannel.Writer, cancellationToken);
 
             // read all of the output
             outputChannel.Writer.TryComplete();
@@ -101,21 +72,16 @@ namespace day07
 
         private async ValueTask StepUntilHalted(CancellationToken cancellationToken = default)
         {
-            if (disposed)
-                throw new ObjectDisposedException(nameof(Machine));
-
             while (!IsHalted)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
                 await Step(cancellationToken);
             }
         }
 
         public ValueTask Step(CancellationToken cancellationToken = default)
         {
-            if (disposed)
-                throw new ObjectDisposedException(nameof(Machine));
-
             switch (CurrentInstruction)
             {
                 case Instruction.Add:
@@ -199,7 +165,7 @@ namespace day07
         }
 
         private Instruction CurrentInstruction
-            => (Instruction)(memory[programCounter] % InstructionLimit);
+            => (Instruction)(memory[programCounter] % FlagStart);
 
         private int GetParameterValue(int index)
             => GetParameterMode(index) switch
@@ -220,9 +186,9 @@ namespace day07
         private int GetParameterFlags(int index)
             => index switch
             {
-                1 => (memory[programCounter] / (InstructionLimit * 1)) % 10,
-                2 => (memory[programCounter] / (InstructionLimit * 10)) % 10,
-                3 => (memory[programCounter] / (InstructionLimit * 100)) % 10,
+                1 => (memory[programCounter] / (FlagStart * 1)) % 10,
+                2 => (memory[programCounter] / (FlagStart * 10)) % 10,
+                3 => (memory[programCounter] / (FlagStart * 100)) % 10,
                 _ => throw new ArgumentOutOfRangeException(nameof(index), index, "Invalid parameter index")
             };
 
