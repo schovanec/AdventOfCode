@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -31,8 +32,46 @@ namespace day08
 
             var result = countOf1 * countOf2;
             Console.WriteLine($"Result = {result}");
+
+            var image = MergeLayers(layers);
+
+            Console.WriteLine();
+            Console.WriteLine("Image:");
+            for (var y = 0; y < height; ++y)
+            {
+                for (var x = 0; x < width; ++x)
+                    Console.Write(image[y * width + x] ? 'X' : ' ');
+
+                Console.WriteLine();
+            }
         }
 
+        private static bool[] MergeLayers(IEnumerable<ReadOnlyMemory<char>> layers)
+        {
+            bool[] image = null;
+            bool[] mask = null;
+
+            const char black = '0';
+            const char white = '1';
+
+            foreach (var layer in layers)
+            {
+                var data = layer.Span;
+                image ??= new bool[layer.Length];
+                mask ??= new bool[layer.Length];
+
+                for (var i = 0; i < image.Length; ++i)
+                {
+                    if (!mask[i] && (data[i] == black || data[i] == white))
+                    {
+                        mask[i] = true;
+                        image[i] = (data[i] == white);
+                    }
+                }
+            }
+
+            return image;
+        }
     }
 
     static class SpanExtensions
