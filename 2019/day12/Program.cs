@@ -67,37 +67,6 @@ namespace day12
             Console.WriteLine($"Total Energy: {totalEnergy}");
         }
 
-        // private static void RunPart2Slow((long, long, long)[] input)
-        // {
-        //     var initial = input.Select(p => new Moon(p)).ToArray();
-        //     var moons = input.Select(p => new Moon(p)).ToArray();
-        //     var pairs = moons.SelectMany(m => moons, (m1, m2) => (first: m1, second: m2)).Where(p => p.first != p.second).ToArray();
-        //     var steps = 0;
-        //     var counts = new int[3];
-        //     do
-        //     {
-        //         foreach (var pair in pairs)
-        //             pair.first.ApplyGravity(pair.second);
-
-        //         foreach (var moon in moons)
-        //             moon.StepLocation();
-
-        //         ++steps;
-
-        //         if (initial.Select(m => m.Position.X).SequenceEqual(moons.Select(m => m.Position.X)))
-        //             ++counts[0];
-        //         if (initial.Select(m => m.Position.Y).SequenceEqual(moons.Select(m => m.Position.Y)))
-        //             ++counts[1];
-        //         if (initial.Select(m => m.Position.Z).SequenceEqual(moons.Select(m => m.Position.Z)))
-        //             ++counts[2];
-        //     }
-        //     while (!initial.Select(m => m.Position).SequenceEqual(moons.Select(m => m.Position))
-        //         || !moons.All(m => m.Velocity.Equals(default)));
-
-        //     Console.WriteLine($"Part 2 Result = {steps}");
-        //     Console.WriteLine($"Counts = {string.Join(", ", counts)}");
-        // }
-
         private static void RunPart2((long x, long y, long z)[] moons)
         {
             var axisStepCounts = new[]
