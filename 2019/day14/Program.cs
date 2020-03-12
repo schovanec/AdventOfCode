@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -11,21 +12,34 @@ namespace day14
     {
         static void Main(string[] args)
         {
-            var reactions = File.ReadLines(args.FirstOrDefault() ?? "sample3.txt").Select(Reaction.Parse).ToList();
+            var input = File.ReadLines(args.FirstOrDefault() ?? "sample3.txt").Select(Reaction.Parse).ToList();
+            var reactions = input.ToDictionary(r => r.Output.Chemical);
 
-            var reactionsByProduct = reactions.ToDictionary(r => r.Output.Chemical);
+            var clock = new Stopwatch();
 
             // Part 1
-            long totalOreRequired = CalculateRquiredOre(1, reactionsByProduct);
+            clock.Start();
+            long totalOreRequired = CalculateRquiredOre(1, reactions);
+            clock.Stop();
             Console.WriteLine($"Total ORE = {totalOreRequired}");
+            Console.WriteLine($"Time = {clock.ElapsedMilliseconds:#,##0}ms");
+            Console.WriteLine();
 
             // Part 2
-            var targetOreAmount = 1000000000000;
-            
+            clock.Restart();
+            long bestFuelAmount = FindMaximumFuel(1000000000000, reactions);
+            clock.Stop();
+            Console.WriteLine($"Maximum Fuel Amount = {bestFuelAmount}");
+            Console.WriteLine($"Time = {clock.ElapsedMilliseconds:#,##0}ms");
+            Console.WriteLine();
+        }
+
+        private static long FindMaximumFuel(long targetOreAmount, Dictionary<string, Reaction> reactionsByProduct)
+        {
             // find the point where we go over
             var bestFuelAmount = 0L;
             var highFuelAmount = 1L;
-            var lastOreAmount = totalOreRequired;
+            var lastOreAmount = 0L;
             while (lastOreAmount < targetOreAmount)
             {
                 bestFuelAmount = highFuelAmount;
@@ -44,7 +58,7 @@ namespace day14
                     highFuelAmount = fuelAmount;
             }
 
-            Console.WriteLine($"Maximum Fuel Amount = {bestFuelAmount}");
+            return bestFuelAmount;
         }
 
         private static long CalculateRquiredOre(long fuelAmount, Dictionary<string, Reaction> reactions)
