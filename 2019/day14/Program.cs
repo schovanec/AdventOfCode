@@ -11,58 +11,57 @@ namespace day14
     {
         static void Main(string[] args)
         {
-            var reactions = File.ReadLines(args.FirstOrDefault() ?? "sample2.txt").Select(Reaction.Parse).ToList();
+            var reactions = File.ReadLines(args.FirstOrDefault() ?? "sample3.txt").Select(Reaction.Parse).ToList();
 
             var reactionsByProduct = reactions.ToDictionary(r => r.Output.Chemical);
 
-            var targets = new Queue<ReactionPart>();
-            var totalOreRequired = 0L;
-            targets.Enqueue(new ReactionPart("FUEL", 1));
-            var excess = reactionsByProduct.Keys.ToDictionary(x => x, _ => 0L);
-            while (targets.Count > 0)
+            var totalRequired = reactionsByProduct.Keys.ToDictionary(x => x, _ => 0L);
+            totalRequired["FUEL"] = 1;
+            totalRequired["ORE"] = 0;
+
+            var totalProduced = reactionsByProduct.Keys.ToDictionary(x => x, _ => 0L);
+
+            var needed = totalRequired.Where(x => x.Key != "ORE" && x.Value > totalProduced[x.Key]).Select(x => x.Key);
+            while (true)
             {
-                var target = targets.Dequeue();
-                if (target.Chemical == "ORE")
+                var target = needed.FirstOrDefault();
+                if (target == null)
+                    break;
+
+                if (target != "ORE")
                 {
-                    totalOreRequired += target.Quantity;
-                }
-                else
-                {
-                    var reaction = reactionsByProduct[target.Chemical];
+                    var reaction = reactionsByProduct[target];
 
-                    var required = target.Quantity;
-                    var available = excess[target.Chemical];
-                    if (available > 0)
-                    {
-                        var amountToUse = Math.Min(available, required);
-                        required -= amountToUse;
-                        available -= amountToUse;
-                        excess[target.Chemical] = available;
-                    }
+                    var required = totalRequired[target] - totalProduced[target];
+                    var multiple = required / reaction.Output.Quantity;
+                    if (required % reaction.Output.Quantity > 0)
+                        ++multiple;
 
-                    if (required > 0)
-                    {
-                        var multiple = required / reaction.Output.Quantity;
-                        if (required % reaction.Output.Quantity > 0)
-                            ++multiple;
+                    foreach (var input in reaction.Inputs)
+                        totalRequired[input.Chemical] += input.Quantity * multiple;
 
-                        foreach (var input in reaction.Inputs)
-                            targets.Enqueue(new ReactionPart(input.Chemical, input.Quantity * multiple));
-
-                        var amountProduced = multiple * reaction.Output.Quantity;
-                        available += Math.Max(0, amountProduced - required);
-                        excess[target.Chemical] = available;
-                    }
+                    totalProduced[target] += reaction.Output.Quantity * multiple;
                 }
             }
 
+            var totalOreRequired = totalRequired["ORE"];
             Console.WriteLine($"Total ORE = {totalOreRequired}");
 
-            foreach (var item in excess.Where(x => x.Value > 0))
-                Console.WriteLine($"Excess {item.Key} = {item.Value}");
+            var availableOre = 1000000000000L;
+            var initialTotal = availableOre / totalOreRequired;
+            var totalExcess = from r in totalRequired
+                              join p in totalProduced on r.Key equals p.Key
+                              let excess = p.Value - r.Value
+                              select (p.Key, amount: excess * initialTotal);
 
-            //var availableOreQuantity = 1000000000000;
-            //var maximumFuelProduced = 
+            foreach (var item in totalExcess)
+                Console.WriteLine(item);
+
+            var additionalTotal = totalExcess.Min(x => x.amount / totalRequired[x.Key]);
+
+            Console.WriteLine($"Initial Total: {initialTotal}");
+            Console.WriteLine($"Additional: {additionalTotal}");
+            Console.WriteLine($"Sum: {initialTotal + additionalTotal}");
         }
     }
 
