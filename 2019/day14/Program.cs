@@ -15,11 +15,45 @@ namespace day14
 
             var reactionsByProduct = reactions.ToDictionary(r => r.Output.Chemical);
 
-            var totalRequired = reactionsByProduct.Keys.ToDictionary(x => x, _ => 0L);
-            totalRequired["FUEL"] = 1;
+            // Part 1
+            long totalOreRequired = CalculateRquiredOre(1, reactionsByProduct);
+            Console.WriteLine($"Total ORE = {totalOreRequired}");
+
+            // Part 2
+            var targetOreAmount = 1000000000000;
+            
+            // find the point where we go over
+            var bestFuelAmount = 0L;
+            var highFuelAmount = 1L;
+            var lastOreAmount = totalOreRequired;
+            while (lastOreAmount < targetOreAmount)
+            {
+                bestFuelAmount = highFuelAmount;
+                highFuelAmount *= 2;
+                lastOreAmount = CalculateRquiredOre(highFuelAmount, reactionsByProduct);
+            }
+
+            // do a binary search between best and high
+            while (highFuelAmount - bestFuelAmount > 1)
+            {
+                var fuelAmount = (bestFuelAmount + highFuelAmount) / 2;
+                var ore = CalculateRquiredOre(fuelAmount, reactionsByProduct);
+                if (ore < targetOreAmount)
+                    bestFuelAmount = fuelAmount;
+                else if (ore > targetOreAmount)
+                    highFuelAmount = fuelAmount;
+            }
+
+            Console.WriteLine($"Maximum Fuel Amount = {bestFuelAmount}");
+        }
+
+        private static long CalculateRquiredOre(long fuelAmount, Dictionary<string, Reaction> reactions)
+        {
+            var totalRequired = reactions.Keys.ToDictionary(x => x, _ => 0L);
+            totalRequired["FUEL"] = fuelAmount;
             totalRequired["ORE"] = 0;
 
-            var totalProduced = reactionsByProduct.Keys.ToDictionary(x => x, _ => 0L);
+            var totalProduced = reactions.Keys.ToDictionary(x => x, _ => 0L);
 
             var needed = totalRequired.Where(x => x.Key != "ORE" && x.Value > totalProduced[x.Key]).Select(x => x.Key);
             while (true)
@@ -30,7 +64,7 @@ namespace day14
 
                 if (target != "ORE")
                 {
-                    var reaction = reactionsByProduct[target];
+                    var reaction = reactions[target];
 
                     var required = totalRequired[target] - totalProduced[target];
                     var multiple = required / reaction.Output.Quantity;
@@ -45,23 +79,7 @@ namespace day14
             }
 
             var totalOreRequired = totalRequired["ORE"];
-            Console.WriteLine($"Total ORE = {totalOreRequired}");
-
-            var availableOre = 1000000000000L;
-            var initialTotal = availableOre / totalOreRequired;
-            var totalExcess = from r in totalRequired
-                              join p in totalProduced on r.Key equals p.Key
-                              let excess = p.Value - r.Value
-                              select (p.Key, amount: excess * initialTotal);
-
-            foreach (var item in totalExcess)
-                Console.WriteLine(item);
-
-            var additionalTotal = totalExcess.Min(x => x.amount / totalRequired[x.Key]);
-
-            Console.WriteLine($"Initial Total: {initialTotal}");
-            Console.WriteLine($"Additional: {additionalTotal}");
-            Console.WriteLine($"Sum: {initialTotal + additionalTotal}");
+            return totalOreRequired;
         }
     }
 
