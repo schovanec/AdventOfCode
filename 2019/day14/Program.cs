@@ -27,38 +27,36 @@ namespace day14
 
             // Part 2
             clock.Restart();
-            long bestFuelAmount = FindMaximumFuel(1000000000000, reactions);
+            var targetAmount = 1000000000000;
+            var initialLowerBound = targetAmount / totalOreRequired;
+            long bestFuelAmount = FindMaximumFuel(targetAmount, reactions, initialLowerBound);
             clock.Stop();
             Console.WriteLine($"Maximum Fuel Amount = {bestFuelAmount}");
             Console.WriteLine($"Time = {clock.ElapsedMilliseconds:#,##0}ms");
             Console.WriteLine();
         }
 
-        private static long FindMaximumFuel(long targetOreAmount, Dictionary<string, Reaction> reactionsByProduct)
+        private static long FindMaximumFuel(
+            long targetOreAmount, Dictionary<string, Reaction> reactions, long initialLowerBound)
         {
             // find the point where we go over
-            var bestFuelAmount = 0L;
-            var highFuelAmount = 1L;
-            var lastOreAmount = 0L;
-            while (lastOreAmount < targetOreAmount)
-            {
-                bestFuelAmount = highFuelAmount;
-                highFuelAmount *= 2;
-                lastOreAmount = CalculateRquiredOre(highFuelAmount, reactionsByProduct);
-            }
+            var upperBound = initialLowerBound;
+            while (CalculateRquiredOre(upperBound, reactions) < targetOreAmount)
+                upperBound *= 2;
 
             // do a binary search between best and high
-            while (highFuelAmount - bestFuelAmount > 1)
+            var lowerBound = initialLowerBound;
+            while (upperBound - lowerBound > 1)
             {
-                var fuelAmount = (bestFuelAmount + highFuelAmount) / 2;
-                var ore = CalculateRquiredOre(fuelAmount, reactionsByProduct);
+                var fuelAmount = (lowerBound + upperBound) / 2;
+                var ore = CalculateRquiredOre(fuelAmount, reactions);
                 if (ore < targetOreAmount)
-                    bestFuelAmount = fuelAmount;
+                    lowerBound = fuelAmount;
                 else if (ore > targetOreAmount)
-                    highFuelAmount = fuelAmount;
+                    upperBound = fuelAmount;
             }
 
-            return bestFuelAmount;
+            return lowerBound;
         }
 
         private static long CalculateRquiredOre(long fuelAmount, Dictionary<string, Reaction> reactions)
