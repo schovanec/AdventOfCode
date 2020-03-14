@@ -1,45 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
-using System.Threading.Channels;
-using System.Threading.Tasks;
 
 namespace day15
 {
-    public enum ExecuteState
-    {
-        Running,
-        Halted,
-        NeedInput,
-        HaveOutput
-    }
-
-    public struct ExecuteResult
-    {
-        public static readonly ExecuteResult Running = new ExecuteResult(ExecuteState.Running);
-        public static readonly ExecuteResult Halted = new ExecuteResult(ExecuteState.Halted);
-        public static readonly ExecuteResult NeedInput = new ExecuteResult(ExecuteState.NeedInput);
-
-        public ExecuteResult(ExecuteState state, long? output = default)
-        {
-            State = state;
-            Output = output;
-        }
-
-        public ExecuteState State { get; }
-
-        public long? Output { get; }
-
-        public static ExecuteResult HaveOutput(long value)
-            => new ExecuteResult(ExecuteState.HaveOutput, value);
-    }
-
     public sealed class IntcodeMachine
     {
         private readonly long[] memory;
-        //private readonly Func<CancellationToken, ValueTask<long>> readInput;
-        //private readonly Func<long, CancellationToken, ValueTask<bool>> writeOutput;
         private long programCounter = 0;
         private long relativeBaseAddress = 0;
 
@@ -57,52 +24,6 @@ namespace day15
 
         public static long[] ParseCode(string code)
             => (code ?? throw new ArgumentNullException(nameof(code))).Split(',').Select(long.Parse).ToArray();
-
-#if false
-        public static async Task RunProgramAsync(
-            long[] program,
-            Func<CancellationToken, ValueTask<long>> read,
-            Func<long, CancellationToken, ValueTask> write,
-            CancellationToken cancellationToken = default)
-        {
-            var vm = new IntcodeMachine(program, read, write);
-            await vm.StepUntilHalted(cancellationToken);
-        }
-
-        public static Task RunProgramAsync(
-            long[] program,
-            Func<long> read,
-            Action<long> write,
-            CancellationToken cancellationToken = default)
-        {
-            return RunProgramAsync(
-                program,
-                _ => new ValueTask<long>(read()),
-                (v, _) => { write(v); return default; },
-                cancellationToken);
-        }
-
-        public static void RunProgram(long[] program, Func<long> read, Action<long> write)
-            => RunProgramAsync(program, read, write).Wait();
-
-        public static async Task<List<long>> RunProgramAsync(
-            long[] program, IEnumerable<long> input, CancellationToken cancellationToken = default)
-        {
-            using var stream = input?.GetEnumerator() ?? throw new ArgumentNullException(nameof(input));
-            var output = new List<long>();
-            await RunProgramAsync(
-                program,
-                () => stream.MoveNext() ? stream.Current : throw new InvalidOperationException(),
-                output.Add,
-                cancellationToken
-            );
-
-            return output;
-        }
-
-        public static List<long> RunProgram(long[] program, IEnumerable<long> input, CancellationToken cancellationToken = default)
-            => RunProgramAsync(program, input, cancellationToken).Result;
-#endif
 
         public bool IsHalted => CurrentInstruction == Instruction.Halt;
 
@@ -279,5 +200,33 @@ namespace day15
             Indirect,
             Relative
         }
+    }
+
+    public enum ExecuteState
+    {
+        Running,
+        Halted,
+        NeedInput,
+        HaveOutput
+    }
+
+    public struct ExecuteResult
+    {
+        public static readonly ExecuteResult Running = new ExecuteResult(ExecuteState.Running);
+        public static readonly ExecuteResult Halted = new ExecuteResult(ExecuteState.Halted);
+        public static readonly ExecuteResult NeedInput = new ExecuteResult(ExecuteState.NeedInput);
+
+        public ExecuteResult(ExecuteState state, long? output = default)
+        {
+            State = state;
+            Output = output;
+        }
+
+        public ExecuteState State { get; }
+
+        public long? Output { get; }
+
+        public static ExecuteResult HaveOutput(long value)
+            => new ExecuteResult(ExecuteState.HaveOutput, value);
     }
 }
