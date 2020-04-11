@@ -36,14 +36,6 @@ namespace day18
 
             var minPathLength = FindShortestPathLength(graph, graph.Nodes.OrderByDescending(x => x.Value.Length).First());
             Console.WriteLine($"Part 1 Result = {minPathLength}");
-
-            //var minPathLength = FindShortestPathLength(graph);
-
-            // foreach (var g in graph.Edges)
-            // {
-            //     foreach (var edge in g)
-            //         Console.WriteLine($"{g.Key} => {edge.type} [{edge.cost}]");
-            // }
         }
 
         private static int FindShortestPathLength(Graph graph, Node target, Node start = default(Node))
@@ -52,7 +44,6 @@ namespace day18
             var cost = unvisited.ToDictionary(x => x, x => int.MaxValue);
             var prev = unvisited.ToDictionary(x => x, x => default(Node?));
 
-#if true
             cost[start] = 0;
             while (unvisited.Count > 0)
             {
@@ -74,96 +65,10 @@ namespace day18
             }
 
             return cost[target];
-#else
-            Node? current = start;
-            while (current.HasValue && (unvisited.Contains(target) || target.Equals(current)))
-            {
-                var currentCost = cost[current.Value];
-                foreach (var item in graph.Edges[current.Value].Where(e => unvisited.Contains(e.next)))
-                    cost[item.next] = Math.Min(cost[item.next], currentCost + item.cost);
-
-                unvisited.Remove(current.Value);
-                current = cost.Where(c => unvisited.Contains(c.Key) && c.Value < int.MaxValue).OrderBy(c => c.Value).Select(c => (Node?)c.Key).FirstOrDefault();
-            }
-
-            return cost[target];
-#endif
         }
 
-#if false
-        private static int FindShortestPathLength(Graph g)
-        {
-            var allKeys = g.Keys.ToImmutableHashSet();
-            var minPathLength = default(int?);
-
-            var queue = new Queue<(char node, char prev, int distance, ImmutableHashSet<char> foundKeys)>();
-            queue.Enqueue((StartNode, StartNode, 0, ImmutableHashSet<char>.Empty));
-
-            while (queue.Count > 0)
-            {
-                var (node, prev, cost, foundKeys) = queue.Dequeue();
-                Console.WriteLine($"{node}, {cost}: {{{string.Join(",", foundKeys)}}}");
-                if (allKeys.IsSubsetOf(foundKeys))
-                {
-                    Console.WriteLine(cost);
-                    if (!minPathLength.HasValue || minPathLength.Value > cost)
-                        minPathLength = cost;
-                }
-                else
-                {
-                    foreach (var item in g.Edges[node].OrderBy(n => n.cost))
-                    {
-                        var newCost = cost + item.cost;
-                        if (!minPathLength.HasValue || newCost < minPathLength.Value)
-                        {
-                            if (item.node == StartNode || (IsKey(item.node) && IsKeyForDoorFound(item.node, foundKeys)))
-                            {
-                                if (item.node != prev)
-                                    queue.Enqueue((item.node, node, newCost, foundKeys));
-                            }
-                            else if (IsKey(item.node))
-                                queue.Enqueue((item.node, node, newCost, foundKeys.Add(item.node)));
-                        }
-                    }
-                }
-            }
-
-            return minPathLength ?? throw new InvalidOperationException();
-        }
-
-        private static bool IsKeyForDoorFound(char door, ImmutableHashSet<char> foundKeys)
-            => foundKeys.Contains(char.ToLowerInvariant(door));
-#endif
-
-#if false
-        private static ImmutableDictionary<char, int> FindReachableKeys(Graph g, char node, ImmutableHashSet<char> foundKeys)
-        {
-            var result = ImmutableDictionary.CreateBuilder<char, int>();
-            foreach (var edge in g.Edges[node])
-            {
-                if (IsKey(edge.node) && !foundKeys.Contains(edge.node))
-                {
-                    if (!result.TryGetValue(edge.node, out var cost) || cost > edge.cost)
-                        result[edge.node] = edge.cost;
-                }
-                else if (edge.node == StartNode || (IsDoor(edge.node) && foundKeys.Contains(char.ToLowerInvariant(edge.node))))
-                {
-                    foreach (var item in FindReachableKeys(g, edge.node, foundKeys))
-                    {
-                        if (!result.TryGetValue(item.Key, out var cost) || cost > item.Value)
-                            result[item.Key] = item.Value;
-                    }
-                }
-            }
-
-            return result.ToImmutable();
-        }
-#endif
-
-#if true
         private static Graph BuildGraph(string[] map)
         {
-#if true
             var cost = new Dictionary<(Node from, Node to), int>();
             var nodes = new HashSet<Node>();
 
@@ -195,46 +100,10 @@ namespace day18
                 nodes,
                 cost.Select(x => (x.Key.from, x.Key.to, x.Value))
             );
-#else
-            //var nodes = ImmutableHashSet.CreateBuilder<Node>();
-            //nodes.Add(new Node());
-
-            var edges = ImmutableDictionary.CreateBuilder<Node, List<(Node to, int cost)>>();
-
-            var queue = new Queue<(Node node, char lastKey)>();
-            queue.Enqueue((new Node(), StartNode));
-
-            while (queue.Count > 0)
-            {
-                var (node, lastKey) = queue.Dequeue();
-
-                if (!edges.TryGetValue(node, out var adjacent))
-                    adjacent = edges[node] = new List<(Node, int)>();
-
-                var reachable = FindReachableKeys(map, lastKey, node);
-                foreach (var item in reachable)
-                {
-                    var newNode = node.WithKey(item.Key);
-                    if (edges.TryGetKey(newNode, out var existingNode))
-                        newNode = existingNode;
-
-                    adjacent.Add((newNode, item.Value));
-
-                    queue.Enqueue((newNode, item.Key));
-                }
-            }
-
-            return new Graph(
-                edges.Keys,
-                edges.SelectMany(x => x.Value, (x, v) => (x.Key, v.to, v.cost))
-            );
-#endif
         }
 
         private static ImmutableDictionary<char, int> FindReachableKeys(string[] map, char start, Node foundKeys)
         {
-            // var seen = new HashSet<(int row, int col)>() { startPosition };
-
             var reachable = ImmutableDictionary.CreateBuilder<char, int>();
 
             var startPosition = FindLocationInMap(map, start);
@@ -288,49 +157,6 @@ namespace day18
 
             throw new InvalidOperationException();
         }
-#else
-        private static Graph BuildGraph(string[] map)
-        {
-            var nodes = FindNodes(map).ToArray();
-            var edges = nodes.SelectMany(n => FindEdges(map, n)).ToLookup(x => x.from, x => (x.to, x.cost));
-
-            return new Graph(nodes.Select(n => n.type).ToImmutableArray(), edges);
-        }
-
-        private static IEnumerable<(char from, char to, int cost)> FindEdges(string[] map, (char type, int row, int col) start)
-        {
-            var seen = new HashSet<(int row, int col)>() { (start.row, start.col) };
-
-            var queue = new Queue<(int row, int col, int distance)>();
-            queue.Enqueue((start.row, start.col, 0));
-
-            var reachable = new Dictionary<char, int>();
-            while (queue.Count > 0)
-            {
-                var current = queue.Dequeue();
-                var distance = current.distance + 1;
-                foreach (var pos in EnumAllMoves(current.row, current.col, map))
-                {
-                    var type = map[pos.row][pos.col];
-                    if (!seen.Contains(pos) && type != WallNode)
-                    {
-                        seen.Add(pos);
-
-                        if (type == OpenNode || type == StartNode)
-                        {
-                            queue.Enqueue((pos.row, pos.col, distance));
-                        }
-                        else if (!reachable.TryGetValue(type, out var cost) || cost > distance)
-                        {
-                            reachable[type] = distance;
-                        }
-                    }
-                }
-            }
-
-            return reachable.Select(x => (start.type, x.Key, x.Value));
-        }
-#endif
 
         private static IEnumerable<(char type, int row, int col)> FindNodes(string[] map)
         {
