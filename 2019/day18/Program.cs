@@ -21,24 +21,67 @@ namespace day18
 #else
             var map = new string[]
             {
-                "########################",
-                "#@..............ac.GI.b#",
-                "###d#e#f################",
-                "###A#B#C################",
-                "###g#h#i################",
-                "########################"
+                "#############",
+                "#g#f.D#..h#l#",
+                "#F###e#E###.#",
+                "#dCba...BcIJ#",
+                "#####.@.#####",
+                "#nK.L...G...#",
+                "#M###N#H###.#",
+                "#o#m..#i#jk.#",
+                "#############"
             };
 #endif
+            DoPart1(map);
+
+            DoPart2(map);
+        }
+
+        private static void DoPart1(string[] map)
+        {
             Console.WriteLine("Building Graph...");
             var graph = BuildGraph(map);
 
             Console.WriteLine($"Graph Completed - {graph.Nodes.Length} nodes and {graph.Edges.Count} edges");
 
-            var minPathLength = FindShortestPathLength(graph, graph.Nodes.OrderByDescending(x => x.Value.Length).First());
+            var start = graph.Nodes.Where(g => g.Value.Length == 0).Single();
+            var minPathLength = FindShortestPathLength(graph, start);
             Console.WriteLine($"Part 1 Result = {minPathLength}");
         }
 
-        private static int FindShortestPathLength(Graph graph, Node target, Node start = default(Node))
+        private static string[] replacement = new[]
+        {
+            "@#@",
+            "###",
+            "@#@"
+        };
+
+        private static void DoPart2(string[] map)
+        {
+            ReplaceMapStart(map);
+
+            Console.WriteLine("Building Graph...");
+            var graph = BuildGraph(map);
+
+            Console.WriteLine($"Graph Completed - {graph.Nodes.Length} nodes and {graph.Edges.Count} edges");
+
+            var start = graph.Nodes.Where(g => g.Value.Length == 0).Single();
+            var minPathLength = FindShortestPathLength(graph, start);
+            Console.WriteLine($"Part 2 Result = {minPathLength}");
+        }
+
+        private static void ReplaceMapStart(string[] map)
+        {
+            var pos = FindLocationInMap(map, StartNode).Single();
+
+            for (int i = 0; i < replacement.Length; ++i)
+            {
+                var line = map[pos.row - 1 + i];
+                map[pos.row - 1 + i] = line.Substring(0, pos.col - 1) + replacement[i] + line.Substring(pos.col + 2);
+            }
+        }
+
+        private static int FindShortestPathLength(Graph graph, Node start)
         {
             var unvisited = new HashSet<Node>(graph.Nodes);
             var cost = unvisited.ToDictionary(x => x, x => int.MaxValue);
@@ -49,9 +92,6 @@ namespace day18
             {
                 var current = unvisited.OrderBy(v => cost[v]).FirstOrDefault();
                 unvisited.Remove(current);
-
-                if (current.Equals(target))
-                    break;
 
                 foreach (var neighbor in graph.Edges[current].Where(n => unvisited.Contains(n.next)))
                 {
@@ -64,7 +104,10 @@ namespace day18
                 }
             }
 
-            return cost[target];
+            return cost.GroupBy(c => c.Key.Value.Length)
+                       .OrderByDescending(g => g.Key)
+                       .Select(g => g.Min(x => x.Value))
+                       .First();
         }
 
         private static Graph BuildGraph(string[] map)
@@ -72,25 +115,30 @@ namespace day18
             var cost = new Dictionary<(Node from, Node to), int>();
             var nodes = new HashSet<Node>();
 
+            var starts = FindLocationInMap(map, StartNode).ToImmutableArray();
+
             var queue = new Queue<Node>();
-            queue.Enqueue(default(Node));
+            queue.Enqueue(new Node(null, starts));
 
             while (queue.Count > 0)
             {
                 var node = queue.Dequeue();
-                var lastKey = node.Value.DefaultIfEmpty(StartNode).Last();
+                //var lastKey = node.Value.DefaultIfEmpty(StartNode).Last();
 
                 nodes.Add(node);
 
-                var reachable = FindReachableKeys(map, lastKey, node);
+                var reachable = from index in Enumerable.Range(0, node.Positions.Length)
+                                from item in FindReachableKeys(map, node.Positions[index], node)
+                                select (pos: item.Key, cost: item.Value, index);
                 foreach (var item in reachable)
                 {
-                    var newNode = node.WithKey(item.Key);
+                    var newNode = node.WithKeyAndPositions(map[item.pos.row][item.pos.col],
+                                                           node.Positions.SetItem(item.index, item.pos));
 
                     var edge = (node, newNode);
-                    if (!cost.TryGetValue(edge, out var minEdgeCost) || minEdgeCost > item.Value)
+                    if (!cost.TryGetValue(edge, out var minEdgeCost) || minEdgeCost > item.cost)
                     {
-                        cost[edge] = item.Value;
+                        cost[edge] = item.cost;
                         queue.Enqueue(newNode);
                     }
                 }
@@ -102,11 +150,10 @@ namespace day18
             );
         }
 
-        private static ImmutableDictionary<char, int> FindReachableKeys(string[] map, char start, Node foundKeys)
+        private static ImmutableDictionary<(int row, int col), int> FindReachableKeys(string[] map, (int row, int col) startPosition, Node foundKeys)
         {
-            var reachable = ImmutableDictionary.CreateBuilder<char, int>();
+            var reachable = ImmutableDictionary.CreateBuilder<(int row, int col), int>();
 
-            var startPosition = FindLocationInMap(map, start);
             var minCost = ImmutableDictionary.CreateBuilder<(int row, int col), int>();
 
             var queue = new Queue<((int row, int col) pos, int distance)>();
@@ -123,7 +170,7 @@ namespace day18
 
                     if (IsKey(current) && !foundKeys.Contains(current))
                     {
-                        reachable[current] = distance;
+                        reachable[pos] = distance;
                     }
                     else
                     {
@@ -146,32 +193,15 @@ namespace day18
             return reachable.ToImmutable();
         }
 
-        private static (int row, int col) FindLocationInMap(string[] map, char node)
-        {
-            for (var row = 0; row < map.Length; ++row)
-            {
-                var col = map[row].IndexOf(node);
-                if (col >= 0)
-                    return (row, col);
-            }
-
-            throw new InvalidOperationException();
-        }
-
-        private static IEnumerable<(char type, int row, int col)> FindNodes(string[] map)
+        private static IEnumerable<(int row, int col)> FindLocationInMap(string[] map, char node)
         {
             for (var row = 0; row < map.Length; ++row)
             {
                 var line = map[row];
                 for (var col = 0; col < line.Length; ++col)
                 {
-                    var type = line[col];
-                    if (type == StartNode ||
-                        IsDoor(type) ||
-                        IsKey(type))
-                    {
-                        yield return (type, row, col);
-                    }
+                    if (line[col] == node)
+                        yield return (row, col);
                 }
             }
         }
@@ -179,18 +209,6 @@ namespace day18
         private static bool IsDoor(char ch) => ch >= 'A' && ch <= 'Z';
 
         private static bool IsKey(char ch) => ch >= 'a' && ch <= 'z';
-
-        private static (int row, int col) FindStart(string[] map)
-        {
-            for (var row = 0; row < map.Length; ++row)
-            {
-                var col = map[row].IndexOf(StartNode);
-                if (col >= 0)
-                    return (row, col);
-            }
-
-            throw new InvalidOperationException();
-        }
 
         private static IEnumerable<(int row, int col)> EnumAllMoves(int row, int col, string[] map)
         {
@@ -224,34 +242,46 @@ namespace day18
         {
             private readonly string value;
 
-            public Node(string value)
+            public Node(string value, ImmutableArray<(int row, int col)> positions)
             {
                 this.value = value;
+                this.Positions = positions;
             }
 
             public string Value => value ?? string.Empty;
 
+            public ImmutableArray<(int row, int col)> Positions { get; }
+
             public bool Contains(char key) => Value.IndexOf(key) >= 0;
 
-            public Node WithKey(char key)
+            public Node WithKeyAndPositions(char key, ImmutableArray<(int row, int col)> positions)
             {
                 var result = new StringBuilder(Value.Length + 1);
-                foreach (var ch in Value.OrderBy(x => x).Where(c => c != key))
+                foreach (var ch in Value.Concat(new[] { key }).OrderBy(x => x))
                     result.Append(ch);
 
-                result.Append(key);
-                return new Node(result.ToString());
+                return new Node(result.ToString(), positions);
             }
 
             public bool Equals([AllowNull] Node other)
-                => string.Equals(Value, other.Value, StringComparison.Ordinal);
+                => Positions.SequenceEqual(other.Positions)
+                && string.Equals(Value, other.Value, StringComparison.Ordinal);
 
             public override bool Equals(object obj)
                 => obj is Node node ? Equals(node) : false;
 
-            public override int GetHashCode() => Value.GetHashCode();
+            public override int GetHashCode()
+            {
+                int hash = 17;
+                hash = (hash * 23) + Value.GetHashCode();
+                if (!Positions.IsDefaultOrEmpty)
+                    hash = Positions.Aggregate(hash, (h, n) => (h * 23) + n.GetHashCode());
 
-            public override string ToString() => Value;
+                return hash;
+            }
+
+            public override string ToString()
+                => $"{Value}-{{{string.Join(",", Positions)}}}";
         }
     }
 }
