@@ -17,7 +17,7 @@ namespace day20
             Console.WriteLine($"Part 1 Result = {result1?.ToString() ?? "not found"}");
 
             var result2 = FindShortestPathLengthRecursive(maze);
-            Console.WriteLine($"Part 2 Result = {result2}");
+            Console.WriteLine($"Part 2 Result = {result2?.ToString() ?? "not found"}");
         }
 
         static int? FindShortestPathLength(Maze maze)
