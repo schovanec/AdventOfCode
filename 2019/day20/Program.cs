@@ -11,7 +11,7 @@ namespace day20
     {
         static void Main(string[] args)
         {
-            var maze = Maze.Parse(File.ReadAllLines(args.FirstOrDefault() ?? "sample3.txt"));
+            var maze = Maze.Parse(File.ReadAllLines(args.First()));
 
             var result1 = FindShortestPathLength(maze);
             Console.WriteLine($"Part 1 Result = {result1?.ToString() ?? "not found"}");
