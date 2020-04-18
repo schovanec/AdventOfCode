@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 
@@ -10,54 +11,65 @@ namespace day20
     {
         static void Main(string[] args)
         {
-            var maze = Maze.Parse(File.ReadAllLines(args.FirstOrDefault() ?? "sample1.txt"));
+            var maze = Maze.Parse(File.ReadAllLines(args.FirstOrDefault() ?? "sample3.txt"));
 
             var result1 = FindShortestPathLength(maze);
-            Console.WriteLine($"Part 1 Result = {result1}");
+            Console.WriteLine($"Part 1 Result = {result1?.ToString() ?? "not found"}");
+
+            var result2 = FindShortestPathLengthRecursive(maze);
+            Console.WriteLine($"Part 2 Result = {result2}");
         }
 
-        static int FindShortestPathLength(Maze maze)
+        static int? FindShortestPathLength(Maze maze)
+            => FindShortestPath(
+                start: maze.Start,
+                goal: maze.End,
+                neighbors: maze.EnumNeighbors
+            );
+
+        static int? FindShortestPathLengthRecursive(Maze maze)
+            => FindShortestPath(
+                start: (maze.Start, 0),
+                goal: (maze.End, 0),
+                neighbors: maze.EnumNeighbors
+            );
+
+        static int? FindShortestPath<T>(T start, T goal, Func<T, IEnumerable<T>> neighbors)
+            where T : IEquatable<T>
         {
-            var openSet = new HashSet<(int x, int y)> { maze.Start };
-            var cameFrom = new Dictionary<(int x, int y), (int x, int y)>();
-            var gScore = new Dictionary<(int x, int y), int> { { maze.Start, 0 } };
-            var fScore = new Dictionary<(int x, int y), int> { { maze.Start, Heuristic(maze.Start) } };
+            var openSet = new HashSet<T> { start };
+            var score = new Dictionary<T, int> { { start, 0 } };
 
             while (openSet.Count > 0)
             {
-                var current = openSet.OrderBy(pt => fScore.GetValueOrDefault(pt, int.MaxValue))
-                                     .ThenBy(pt => pt == maze.End ? 1 : 0)
+                var current = openSet.OrderBy(pt => score.GetValueOrDefault(pt, int.MaxValue))
                                      .First();
-                if (current == maze.End)
-                    return gScore[current];
+                if (goal.Equals(current))
+                    return score[current];
 
                 openSet.Remove(current);
-                foreach (var neighbor in maze.EnumNeighbors(current))
+                foreach (var neighbor in neighbors(current))
                 {
-                    var tentative = gScore[current] + 1;
-                    if (tentative < gScore.GetValueOrDefault(neighbor, int.MaxValue))
+                    var tentative = score[current] + 1;
+                    if (tentative < score.GetValueOrDefault(neighbor, int.MaxValue))
                     {
-                        cameFrom[neighbor] = current;
-                        gScore[neighbor] = tentative;
-                        fScore[neighbor] = gScore[neighbor] + Heuristic(neighbor);
+                        score[neighbor] = tentative;
                         openSet.Add(neighbor);
                     }
                 }
             }
 
-            return int.MaxValue;
-
-#if true
-            int Heuristic((int x, int y) pt) => 0;
-#else
-            int Heuristic((int x, int y) pt)
-                => ((maze.End.x - pt.x) * (maze.End.x - pt.x)) + ((maze.End.y - pt.y) * (maze.End.y - pt.y));
-#endif
+            return null;
         }
     }
 
     class Maze
     {
+        private int minX;
+        private int maxX;
+        private int minY;
+        private int maxY;
+
         public Maze(
             ImmutableHashSet<(int x, int y)> openPaths,
             ILookup<(int x, int y), (int x, int y)> portals,
@@ -68,6 +80,11 @@ namespace day20
             Portals = portals;
             Start = start;
             End = end;
+
+            minX = openPaths.Select(pt => pt.x).Min();
+            maxX = openPaths.Select(pt => pt.x).Max();
+            minY = openPaths.Select(pt => pt.y).Min();
+            maxY = openPaths.Select(pt => pt.y).Max();
         }
 
         public (int x, int y) Start { get; }
@@ -90,6 +107,31 @@ namespace day20
             foreach (var destination in Portals[location])
                 yield return destination;
         }
+
+        public IEnumerable<((int x, int y) pt, int depth)> EnumNeighbors(((int x, int y) pt, int depth) location)
+        {
+            foreach (var offset in adjacentNeighborOffsets)
+            {
+                var pt = (location.pt.x + offset.x, location.pt.y + offset.y);
+                if (OpenPaths.Contains(pt))
+                    yield return (pt, location.depth);
+            }
+
+            if (location.depth > 0 || !IsOutsidePoint(location.pt))
+            {
+                var newDepth = location.depth + (IsOutsidePoint(location.pt) ? -1 : 1);
+                Debug.Assert(newDepth >= 0);
+
+                foreach (var destination in Portals[location.pt])
+                    yield return (destination, newDepth);
+            }
+        }
+
+        public bool IsOutsidePoint((int x, int y) location)
+            => location.x == minX
+            || location.x == maxX
+            || location.y == minY
+            || location.y == maxY;
 
         private static readonly ImmutableArray<(int x, int y)> adjacentNeighborOffsets
             = ImmutableArray.Create<(int x, int y)>((-1, 0), (1, 0), (0, -1), (0, 1));
