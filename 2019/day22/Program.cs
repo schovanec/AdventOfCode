@@ -36,10 +36,10 @@ namespace day22
             const long ShuffleCount = 101741582076661;
             const long TargetCardValue = 2020;
 
-            var shuffleOnce = instructions.Aggregate((f, g) => Compose(f, g, DeckSize));
-            var shuffleMany = shuffleOnce.ComposePow(ShuffleCount, DeckSize);
+            var shuffle = instructions.Aggregate((f, g) => Compose(f, g, DeckSize))
+                                      .ComposePow(ShuffleCount, DeckSize);
 
-            var result = shuffleMany.ApplyInverse(TargetCardValue, DeckSize);
+            var result = shuffle.ApplyInverse(TargetCardValue, DeckSize);
             Console.WriteLine($"Part 2 Result = {result}");
         }
 
