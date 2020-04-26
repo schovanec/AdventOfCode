@@ -7,6 +7,9 @@ using System.Numerics;
 
 namespace day22
 {
+    //
+    // Based on: https://codeforces.com/blog/entry/72593
+    //
     static class Program
     {
         private const string InputFile = "input.txt";
