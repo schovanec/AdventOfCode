@@ -11,60 +11,63 @@ namespace day01
         {
             var numbers = (from line in File.ReadLines(args.DefaultIfEmpty("input.txt").First())
                            where !string.IsNullOrWhiteSpace(line)
-                           select long.Parse(line)).ToArray();
+                           let num = long.Parse(line)
+                           orderby num
+                           select num).ToArray();
 
             const long target = 2020;
 
-            //var result = FindSumPair(numbers, target);
+            var resultOf2 = FindSumOfTwo(target, numbers) ?? (0, 0);
+            Console.WriteLine($"For 2 numbers:");
+            Console.WriteLine($"Found: {resultOf2}");
+            Console.WriteLine($"Product: {resultOf2.a * resultOf2.b}");
 
-            for (var count = 2; count <= 3; ++count)
-            {
-                var result = FindSum(numbers, target, count);
-
-                Console.WriteLine($"For {count} numbers:");
-                Console.WriteLine($"Found: {string.Join(", ", result)}");
-                Console.WriteLine($"Product: {result.Aggregate((a, b) => a * b)}");
-                Console.WriteLine();
-            }
+            var resultOf3 = FindSumOfThree(target, numbers) ?? (0, 0, 0);
+            Console.WriteLine($"For 3 numbers:");
+            Console.WriteLine($"Found: {resultOf3}");
+            Console.WriteLine($"Product: {resultOf3.a * resultOf3.b * resultOf3.c}");
         }
 
-        static (long a, long b) FindSumPair(long[] numbers, long target)
+        static (long a, long b)? FindSumOfTwo(long target, long[] numbers)
+            => FindSumOfTwo(target, numbers, 0, numbers.Length);
+
+        static (long a, long b)? FindSumOfTwo(long target, long[] numbers, int startIndex, int count)
         {
-            for (int i = 0; i < numbers.Length; ++i)
+            for (int i = 0; i < count; ++i)
             {
-                for (int j = i+1; j < numbers.Length; ++j)
-                {
-                    if (numbers[i] + numbers[j] == target)
-                        return (numbers[i], numbers[j]);
-                }
+                var current = numbers[i + startIndex];
+                var diff = target - current;
+                
+                var pos = Array.BinarySearch(numbers, i + startIndex + 1, count - i - 1, diff);
+                if (pos >= 0)
+                    return (current, diff);
             }
 
             return default;
         }
 
-        static ImmutableArray<long> FindSum(long[] numbers, long target, int count, int startIndex = 0)
+        static (long a, long b, long c)? FindSumOfThree(long target, long[] numbers)
+            => FindSumOfThree(target, numbers, 0, numbers.Length);
+
+        static (long a, long b, long c)? FindSumOfThree(long target, long[] numbers, int startIndex, int count)
         {
-            if (count <= 0)
+            for (int i = 0; i < count; ++i)
             {
-                return ImmutableArray<long>.Empty;
+                var current = numbers[i + startIndex];
+                var diff = target - current;
+
+                var pos = Array.BinarySearch(numbers, i + startIndex + 1, count - i - 1, diff);
+                if (pos < 0)
+                    pos = ~pos;
+                else
+                    ++pos;
+                
+                var pair = FindSumOfTwo(diff, numbers, i + 1, pos - i - 1);
+                if (pair.HasValue)
+                    return (pair.Value.a, pair.Value.b, current);
             }
 
-            if (count == 1)
-            {
-                return numbers.Skip(startIndex).Contains(target)
-                    ? ImmutableArray.Create(target)
-                    : ImmutableArray<long>.Empty;
-            }
-
-            for (int i = startIndex; i < numbers.Length; ++i)
-            {
-                var current = numbers[i];
-                var result = FindSum(numbers, target - current, count - 1, i + 1);
-                if (!result.IsEmpty)
-                    return result.Add(current);
-            }
-
-            return ImmutableArray<long>.Empty;
+            return default;
         }
     }
 }
