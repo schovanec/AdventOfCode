@@ -14,30 +14,30 @@ namespace Day03
             var file = args.DefaultIfEmpty("input.txt").First();
             var map = ReadMap(file);
 
-            var simpleCount = CountTrees(map, (0, 0), (3, 1));
+            var simpleCount = CountTrees(map, 3, 1);
             Console.WriteLine($"Part 1 Result = {simpleCount}");
 
             Console.WriteLine();
             Console.WriteLine("Part 2:");
-            var directions = new [] { (1, 1), (3, 1), (5, 1), (7, 1), (1, 2) };
-            var counts = directions.Select(d => (direction: d, trees: CountTrees(map, (0, 0), d))).ToList();
-            foreach (var count in counts)
-                Console.WriteLine($"Count For {count.direction}: {count.trees}");
+            var directions = new (int dx, int dy)[] { (1, 1), (3, 1), (5, 1), (7, 1), (1, 2) };
+            var counts = directions.ToDictionary(x => x, d => CountTrees(map, d.dx, d.dy));
+            foreach (var item in counts)
+                Console.WriteLine($"Count For {item.Key}: {item.Value}");
 
-            var product = counts.Aggregate(1L, (p, c) => c.trees * p);
+            var product = counts.Values.Aggregate((a, b) => a * b);
             Console.WriteLine($"Result: {product}");
         }
 
-        private static long CountTrees(Map map, (int x, int y) start, (int dx, int dy) direction)
+        private static long CountTrees(Map map, int deltaX, int deltaY, int startX = 0, int startY = 0)
         {
-            var (x, y) = start;
+            var (x, y) = (startX, startY);
             var count = 0;
             while (y < map.Height)
             {
                 if (map.Trees.Contains((x % map.Width, y)))
                     ++count;
 
-                (x, y) = (x + direction.dx, y + direction.dy);
+                (x, y) = (x + deltaX, y + deltaY);
             }
 
             return count;
