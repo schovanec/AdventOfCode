@@ -21,10 +21,10 @@ namespace Day04
                                      select p;
             Console.WriteLine($"Part 1 Result: {withRequriedFields.Count()}");
 
-            var withValieValues = from p in withRequriedFields
+            var withValidValues = from p in withRequriedFields
                                   where p.All(IsFieldValid)
                                   select p;
-            Console.WriteLine($"Part 2 Result: {withValieValues.Count()}");
+            Console.WriteLine($"Part 2 Result: {withValidValues.Count()}");
         }
         
         private static bool IsFieldValid(KeyValuePair<string, string> field) => IsFieldValid(field.Key, field.Value);
@@ -50,18 +50,14 @@ namespace Day04
             => (value.EndsWith("cm") && IsValidNumber(value[..^2], 150, 193))
             || (value.EndsWith("in") && IsValidNumber(value[..^2], 59, 76));
 
-        private static bool IsValidHexColor(string value)
-            => Regex.IsMatch(value, "^#[0-9a-f]{6}$");
+        private static bool IsValidHexColor(string value) => Regex.IsMatch(value, "^#[0-9a-f]{6}$");
 
-        private static bool IsValidEyeColor(string value)
-            => value switch
-            {
-                "amb" or "blu" or "brn" or "gry" or "grn" or "hzl" or "oth" => true,
-                _ => false
-            };
+        private static readonly ImmutableHashSet<string> validEyeColors 
+            = ImmutableHashSet.Create("amb", "blu", "brn", "gry", "grn", "hzl", "oth");
 
-        private static bool IsValidPassportNumber(string value)
-            => Regex.IsMatch(value, @"^\d{9}$");
+        private static bool IsValidEyeColor(string value) => validEyeColors.Contains(value);
+
+        private static bool IsValidPassportNumber(string value) => Regex.IsMatch(value, @"^\d{9}$");
 
         private static IEnumerable<ImmutableArray<KeyValuePair<string, string>>> ReadPassports(string file)
             => ReadPassports(File.ReadLines(file));
