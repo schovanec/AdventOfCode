@@ -14,13 +14,16 @@ namespace Day04
             var file = args.DefaultIfEmpty("input.txt").First();
             var passports = ReadPassports(file).ToList();
 
-            var allFields = ImmutableHashSet.Create("byr", "iyr", "eyr", "hgt", "hcl", "ecl", "pid", "cid");
-            var requiredFields = allFields.Remove("cid");
+            var requiredFields = ImmutableHashSet.Create("byr", "iyr", "eyr", "hgt", "hcl", "ecl", "pid");
 
-            var withRequriedFields = passports.Where(pp => requiredFields.Except(pp.Select(x => x.Key)).IsEmpty);
+            var withRequriedFields = from p in passports
+                                     where requiredFields.Except(p.Select(x => x.Key)).IsEmpty
+                                     select p;
             Console.WriteLine($"Part 1 Result: {withRequriedFields.Count()}");
 
-            var withValieValues = withRequriedFields.Where(pp => pp.All(IsFieldValid));
+            var withValieValues = from p in withRequriedFields
+                                  where p.All(IsFieldValid)
+                                  select p;
             Console.WriteLine($"Part 2 Result: {withValieValues.Count()}");
         }
         
