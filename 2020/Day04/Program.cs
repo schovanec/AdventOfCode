@@ -47,8 +47,12 @@ namespace Day04
             => int.TryParse(value, out var num) && num >= min && num <= max;
 
         private static bool IsValidHeight(ReadOnlySpan<char> value)
-            => (value.EndsWith("cm") && IsValidNumber(value[..^2], 150, 193))
-            || (value.EndsWith("in") && IsValidNumber(value[..^2], 59, 76));
+            => value[^2..].ToString() switch
+            {
+                "cm" => IsValidNumber(value[..^2], 150, 193),
+                "in" => IsValidNumber(value[..^2], 59, 76),
+                _ => false
+            };
 
         private static bool IsValidHexColor(string value) => Regex.IsMatch(value, "^#[0-9a-f]{6}$");
 
