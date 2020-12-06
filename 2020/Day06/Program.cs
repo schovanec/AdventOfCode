@@ -11,35 +11,31 @@ namespace Day06
         static void Main(string[] args)
         {
             var file = args.DefaultIfEmpty("input.txt").First();
-
             var input = ReadInput(file);
 
-            var unionSum = input.Select(g => g.SelectMany(x => x).Distinct().Count())
-                                .Sum();
-            Console.WriteLine($"Part 1 Result: {unionSum}");
+            var part1Result = input.Select(g => g.Aggregate((a, b) => a.Union(b)))
+                                   .Sum(x => x.Count);
+            Console.WriteLine($"Part 1 Result: {part1Result}");
 
-            var intersectionSum = input.Select(g => g.Aggregate((a, b) => a.Intersect(b)).Count)
-                                       .Sum();
-            Console.WriteLine($"Part 2 Result: {intersectionSum}");
+            var part2Result = input.Select(g => g.Aggregate((a, b) => a.Intersect(b)))
+                                   .Sum(x => x.Count);
+            Console.WriteLine($"Part 2 Result: {part2Result}");
         }
 
         private static IEnumerable<ImmutableList<ImmutableHashSet<char>>> ReadInput(string file)
-            => ReadInput(File.ReadLines(file));
-
-        private static IEnumerable<ImmutableList<ImmutableHashSet<char>>> ReadInput(IEnumerable<string> lines)
         {
             var builder = ImmutableList.CreateBuilder<ImmutableHashSet<char>>();
 
-            foreach (var line in lines)
+            foreach (var answer in File.ReadLines(file).Select(ImmutableHashSet.CreateRange))
             {
-                if (string.IsNullOrWhiteSpace(line))
+                if (answer.IsEmpty)
                 {
                     yield return builder.ToImmutable();
                     builder.Clear();
                 }
                 else
                 {
-                    builder.Add(ImmutableHashSet.CreateRange(line));
+                    builder.Add(answer);
                 }
             }
 
