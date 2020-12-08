@@ -45,10 +45,10 @@ namespace Day08
         {
             var ip = 0;
             var acc = 0;
-            var seen = new HashSet<int>();
-            while (ip < program.Count && !seen.Contains(ip))
+            var seen = new bool[program.Count];
+            while (ip < program.Count && !seen[ip])
             {
-                seen.Add(ip);
+                seen[ip] = true;
 
                 var op = program[ip];
                 switch (op.Operation)
