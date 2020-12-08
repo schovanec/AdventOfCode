@@ -39,7 +39,7 @@ namespace Day07
                     }
                 }
             }
-
+            
             Console.WriteLine($"Part 1 Result = {found.Count}");
         }
 
@@ -50,8 +50,32 @@ namespace Day07
             Console.WriteLine($"Part 1 Result = {count}");
         }
 
+#if true
+        // iterative version
+
+        private static int CountReachable(string start, ILookup<string, Rule> adjacent)
+        {
+            var totalCount = -1; // ignore start
+            var work = new Queue<(string, int)>();
+            work.Enqueue((start, 1));
+            while (work.Count > 0)
+            {
+                var (bag, count) = work.Dequeue();
+                
+                totalCount += count;
+
+                foreach (var child in adjacent[bag])
+                    work.Enqueue((child.Inner, child.Count * count));
+            }
+
+            return totalCount;
+        }
+#else
+        // recursive version
+
         private static int CountReachable(string start, ILookup<string, Rule> adjacent)
             => adjacent[start].Sum(r => r.Count * (1 + CountReachable(r.Inner, adjacent)));
+#endif
 
         private static IEnumerable<Rule> ParseRule(string rule)
         {
