@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
@@ -45,24 +44,21 @@ namespace Day10
         } 
 
         static long CountAdapterArrangements(ReadOnlySpan<int> adapters)
-            => CountAdapterArrangements(adapters, new Dictionary<(int, int), long>());
-
-        static long CountAdapterArrangements(ReadOnlySpan<int> adapters, Dictionary<(int, int), long> cache)
         {
-            if (adapters.Length <= 2)
-                return 1;
-
-            var key = (adapters[0], adapters.Length);
-            if (!cache.TryGetValue(key, out var result))
+            const int size = MaxDiff + 1;
+            Span<long> orders = stackalloc long[size];
+            orders[(adapters.Length - 1) % size] = 1;
+            for (var i = adapters.Length - 2; i >= 0; --i)
             {
-                result = 0L;
-
-                for (var i = 1; i < adapters.Length && adapters[i] <= adapters[0] + MaxDiff; ++i)
-                    result += CountAdapterArrangements(adapters.Slice(i), cache);
-
-                cache.Add(key, result);
+                orders[i % 4] = 0;
+                for (var j = i + 1; j < adapters.Length && j <= i + MaxDiff; ++j)
+                {
+                    if (adapters[j] - adapters[i] <= MaxDiff)
+                        orders[i % 4] += orders[j % size];
+                }
             }
-            return result;
+
+            return orders[0];
         }
     }
 }
