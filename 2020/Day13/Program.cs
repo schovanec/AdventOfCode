@@ -41,6 +41,28 @@ namespace Day13
                               .Select(x => (id: int.Parse(x.value), x.offset))
                               .ToArray();
 
+#if true
+            var minValue = 0L;
+            var runningProduct = 1L;
+            foreach (var (k, v) in inputs.OrderByDescending(x => x.id))
+            {
+                while ((minValue + v) % k != 0)
+                    minValue += runningProduct;
+                
+                runningProduct *= k;
+            }
+
+            Console.WriteLine($"Part 2 Result = {minValue}");
+        }
+#else
+        private static void Part2(string input)
+        {
+            var inputs = input.Split(',')
+                              .Select((x, i) => (value: x, offset: i))
+                              .Where(x => x.value.All(char.IsDigit))
+                              .Select(x => (id: int.Parse(x.value), x.offset))
+                              .ToArray();
+
             // use the chinese remainder theorm to calculate
             // https://www.freecodecamp.org/news/how-to-implement-the-chinese-remainder-theorem-in-java-db88a3f1ffe0/
 
@@ -102,5 +124,6 @@ namespace Day13
                 
             return y;
         }
+#endif
     }
 }
