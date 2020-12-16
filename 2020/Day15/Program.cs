@@ -15,29 +15,36 @@ namespace Day15
                             .ToArray();
 
             var history = input.Select((n, i) => (num: n, turn: i + 1))
-                               .ToDictionary(x => x.num, x => new List<int> { x.turn });
+                               .ToDictionary(x => x.num, x => ((int?)x.turn, default(int?)));
 
-            var turn = input.Length + 1;
-            var last = input.Last();
-            while (turn <= 2020)
+            var previousTurn = new Dictionary<int, int>();
+            var lastTurn = input.Select((n, i) => (num: n, turn: i + 1))
+                               .ToDictionary(x => x.num, x => x.turn);
+
+            var currentTurn = input.Length + 1;
+            var lastNumber = input.Last();
+            while (currentTurn <= 30000000)
             {
-                var turns = history[last];
-                int current;
-                if (turns.Count == 1) 
-                    current = 0;
+                int nextNumber;
+                var lastTurnNumber = lastTurn[lastNumber];
+                if (previousTurn.TryGetValue(lastNumber, out var previousTurnNumber))
+                    nextNumber = lastTurnNumber - previousTurnNumber;
                 else
-                    current = turns[^1] - turns[^2];
+                    nextNumber = 0;
 
-                if (history.TryGetValue(current, out var currentTurns))
-                    currentTurns.Add(turn);
-                else
-                    history[current] = new List<int> { turn };
-                    
-                last = current;
-                ++turn;
+                if (lastTurn.TryGetValue(nextNumber, out var lastTurnForNextNumber))
+                    previousTurn[nextNumber] = lastTurnForNextNumber;
+
+                lastTurn[nextNumber] = currentTurn;
+
+                if (currentTurn == 2020)
+                    Console.WriteLine($"Part 1 Result = {nextNumber}");
+
+                lastNumber = nextNumber;
+                ++currentTurn;
             }
 
-            Console.WriteLine($"Part 1 Result = {last}");
+            Console.WriteLine($"Part 2 Result = {lastNumber}");
         }
     }
 }
