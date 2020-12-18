@@ -6,19 +6,18 @@ using System.Linq;
 
 namespace Day17
 {
-    
     class Program
     {
         static void Main(string[] args)
         {
             var file = args.DefaultIfEmpty("input.txt").First();
-            var input = Parse(File.ReadLines(file));
+            var input = ParseInput(File.ReadLines(file));
 
             var result1 = RunSimulation(input, 3);
             Console.WriteLine($"Part 1 Result = {result1}");
 
             var result2 = RunSimulation(input, 4);
-            Console.WriteLine($"Part 1 Result = {result2}");
+            Console.WriteLine($"Part 2 Result = {result2}");
         }
 
         private static int RunSimulation(ImmutableHashSet<(int x, int y, int z, int w)> input, int dimensions, int steps = 6)
@@ -51,7 +50,7 @@ namespace Day17
             return initial with { ActiveCubes = result.ToImmutable() };
         }
 
-        public static ImmutableHashSet<(int x, int y, int z, int w)> Parse(IEnumerable<string> input)            
+        static ImmutableHashSet<(int x, int y, int z, int w)> ParseInput(IEnumerable<string> input)            
         {
             var result = ImmutableHashSet.CreateBuilder<(int x, int y, int z, int w)>();
             var y = 0;
@@ -79,7 +78,7 @@ namespace Day17
                                              let p = (x, y, z, w)
                                              where p != (0, 0, 0, 0)
                                              select p);
-                                             
+
             public ImmutableHashSet<(int x, int y, int z, int w)> GetAllInactiveNeighbours()
                 => ActiveCubes.SelectMany(GetNeighbours)
                               .Where(pt => !ActiveCubes.Contains(pt))
