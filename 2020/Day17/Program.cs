@@ -79,6 +79,7 @@ namespace Day17
                                              let p = (x, y, z, w)
                                              where p != (0, 0, 0, 0)
                                              select p);
+                                             
             public ImmutableHashSet<(int x, int y, int z, int w)> GetAllInactiveNeighbours()
                 => ActiveCubes.SelectMany(GetNeighbours)
                               .Where(pt => !ActiveCubes.Contains(pt))
