@@ -12,13 +12,22 @@ namespace Day17
         static void Main(string[] args)
         {
             var file = args.DefaultIfEmpty("input.txt").First();
-            var dimension = PocketDimension.Parse(File.ReadLines(file));
+            var input = Parse(File.ReadLines(file));
 
-            var result = dimension;
-            for (var i = 0; i < 6; ++i)
-                result = Step(result);
+            var result1 = RunSimulation(input, 3);
+            Console.WriteLine($"Part 1 Result = {result1}");
 
-            Console.WriteLine($"Part 1 Result = {result.ActiveCubes.Count}");
+            var result2 = RunSimulation(input, 4);
+            Console.WriteLine($"Part 1 Result = {result2}");
+        }
+
+        private static int RunSimulation(ImmutableHashSet<(int x, int y, int z, int w)> input, int dimensions, int steps = 6)
+        {
+            var space = new PocketDimension(input, dimensions);
+            for (var i = 0; i < steps; ++i)
+                space = Step(space);
+
+            return space.ActiveCubes.Count;
         }
 
         static PocketDimension Step(PocketDimension initial)
@@ -39,48 +48,45 @@ namespace Day17
                     result.Add(inactiveCube);
             }
 
-            return new PocketDimension(result.ToImmutable());
+            return initial with { ActiveCubes = result.ToImmutable() };
         }
 
-        record PocketDimension(ImmutableHashSet<(int x, int y, int z)> ActiveCubes)
+        public static ImmutableHashSet<(int x, int y, int z, int w)> Parse(IEnumerable<string> input)            
         {
-            public ImmutableHashSet<(int x, int y, int z)> GetAllInactiveNeighbours()
+            var result = ImmutableHashSet.CreateBuilder<(int x, int y, int z, int w)>();
+            var y = 0;
+            foreach (var line in input)
+            {
+                for (var x = 0; x < line.Length; ++x)
+                {
+                    if (line[x] == '#')
+                        result.Add((x, y, 0, 0));
+                }
+
+                ++y;
+            }
+
+            return result.ToImmutable();
+        }
+
+        record PocketDimension(ImmutableHashSet<(int x, int y, int z, int w)> ActiveCubes, int Dimensions)
+        {
+            private static readonly ImmutableArray<(int x, int y, int z, int w)> neighbourOffsets
+                = ImmutableArray.CreateRange(from x in Enumerable.Range(-1, 3)
+                                             from y in Enumerable.Range(-1, 3)
+                                             from z in Enumerable.Range(-1, 3)
+                                             from w in Enumerable.Range(-1, 3)
+                                             let p = (x, y, z, w)
+                                             where p != (0, 0, 0, 0)
+                                             select p);
+            public ImmutableHashSet<(int x, int y, int z, int w)> GetAllInactiveNeighbours()
                 => ActiveCubes.SelectMany(GetNeighbours)
                               .Where(pt => !ActiveCubes.Contains(pt))
                               .ToImmutableHashSet();
 
-            public IEnumerable<(int x, int y, int z)> GetNeighbours((int x, int y, int z) pt)
-            {
-                for (var x = pt.x - 1; x <= pt.x + 1; ++x)
-                {
-                    for (var y = pt.y - 1; y <= pt.y + 1; ++y)
-                    {
-                        for (var z = pt.z - 1; z <= pt.z + 1; ++z)
-                        {
-                            if ((x, y, z) != pt)                            
-                                yield return (x, y, z);
-                        }
-                    }
-                }
-            }
-
-            public static PocketDimension Parse(IEnumerable<string> input)            
-            {
-                var result = ImmutableHashSet.CreateBuilder<(int x, int y, int z)>();
-                var y = 0;
-                foreach (var line in input)
-                {
-                    for (var x = 0; x < line.Length; ++x)
-                    {
-                        if (line[x] == '#')
-                            result.Add((x, y, 0));
-                    }
-
-                    ++y;
-                }
-
-                return new PocketDimension(result.ToImmutable());
-            }
+            public IEnumerable<(int x, int y, int z, int w)> GetNeighbours((int x, int y, int z, int w) pt)
+                => neighbourOffsets.Where(o => o.w == 0 || Dimensions == 4)
+                                   .Select(o => (pt.x + o.x, pt.y + o.y, pt.z + o.z, pt.w + o.w));
         }
     }
 }
