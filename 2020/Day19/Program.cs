@@ -67,10 +67,9 @@ namespace Day19
                                 .Select(PairRule.CreateSequence)
                                 .ToImmutableArray();
 
-                if (options.Length == 1)
-                    return options.Single();
-                else
-                    return new OptionRule(options);
+                return options.Length == 1
+                    ? options.Single()
+                    : new OptionRule(options);
             }
         }
 
@@ -117,7 +116,7 @@ namespace Day19
             public static Rule CreateSequence(IList<Rule> rules)
             {
                 Rule result = null;
-                
+
                 for (var i = rules.Count - 1; i >= 0; --i)
                 {
                     result = result != null 
