@@ -29,12 +29,7 @@ namespace Day19
 
         private static void Part2(IImmutableDictionary<int, string> rules, List<string> messages)
         {
-            rules = rules.SetItems(new [] {
-                KeyValuePair.Create(8, "42 | 42 8"),
-                KeyValuePair.Create(11, "42 31 | 42 11 31")
-            });
-
-            var rule = ParseRule(rules, 0);
+            var rule = ParseRule(rules, 0, true);
             var result = messages.Count(rule.IsMatch);
             Console.WriteLine($"Part 2 Result = {result}");
         }
@@ -46,38 +41,37 @@ namespace Day19
                     select (id: int.Parse(split[0]), rule: split[1])).ToImmutableDictionary(x => x.id, x => x.rule);
         }
 
-        static Rule ParseRule(IImmutableDictionary<int, string> rules, int index)
+        static Rule ParseRule(IImmutableDictionary<int, string> rules, int index, bool insertLoops = false)
         {
-            var rule = rules[index];
+            return Parse(index);
 
-            if (rule.StartsWith("\""))
-                return new SimpleRule(rule[1]);
-
-            var options = rule.Split('|', StringSplitOptions.TrimEntries)
-                              .Select(opt => opt.Split(' ', StringSplitOptions.TrimEntries)
-                                                .Select(x => int.Parse(x))
-                                                .ToArray())
-                              .ToArray();
-
-            if (options.Length == 2 && options[0].Length == 1 && options[1].Length == 2)
+            Rule Parse(int index)
             {
-                if (options[0][0] == options[1][0] && options[1][1] == index)
-                    return new RepeatRule(ParseRule(rules, options[0][0]));
-            }
-            else if (options.Length == 2 && options[0].Length == 2 && options[1].Length == 3)
-            {
-                if (options[0][0] == options[1][0] && index == options[1][1] && options[0][1] == options[1][2])
-                    return new BalancedRule(ParseRule(rules, options[0][0]), ParseRule(rules, options[0][1]));
-            }
+                var rule = rules[index];
 
-            var optionRules = options.Select(x => x.Select(r => ParseRule(rules, r)).ToArray())
-                                     .Select(PairRule.CreateSequence)
-                                     .ToImmutableArray();
+                if (rule.StartsWith("\""))
+                    return new SimpleRule(rule[1]);
 
-            if (optionRules.Length == 1)
-                return optionRules.Single();
-            else
-                return new OptionRule(optionRules);
+                if (insertLoops)
+                {    
+                    if (index == 8)
+                        return new RepeatRule(Parse(42));
+                    if (index == 11)
+                        return new BalancedRule(Parse(42), Parse(31));
+                }
+
+                var options = rule.Split('|', StringSplitOptions.TrimEntries)
+                                .Select(opt => opt.Split(' ', StringSplitOptions.TrimEntries)
+                                                  .Select(x => Parse(int.Parse(x)))
+                                                  .ToArray())
+                                .Select(PairRule.CreateSequence)
+                                .ToImmutableArray();
+
+                if (options.Length == 1)
+                    return options.Single();
+                else
+                    return new OptionRule(options);
+            }
         }
 
         record MatchState(string Text, int Offset = 0)
@@ -123,16 +117,12 @@ namespace Day19
             public static Rule CreateSequence(IList<Rule> rules)
             {
                 Rule result = null;
+                
                 for (var i = rules.Count - 1; i >= 0; --i)
                 {
-                    if (result == null)
-                    {
-                        result = rules[i];
-                    }
-                    else
-                    {
-                        result = new PairRule(rules[i], result);
-                    }
+                    result = result != null 
+                        ? new PairRule(rules[i], result)
+                        : rules[i];
                 }
 
                 return result;
