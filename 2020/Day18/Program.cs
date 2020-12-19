@@ -130,9 +130,6 @@ namespace Day18
         record UnitExpression(long Value) : Expression
         {
             public override long Evaluate() => Value;
-
-            public override string ToString()
-                => Value.ToString();
         }
 
         record OperatorExpression(char Operator, Expression First, Expression Second) : Expression
@@ -144,9 +141,6 @@ namespace Day18
                     '*' => First.Evaluate() * Second.Evaluate(),
                     _   => throw new InvalidOperationException()
                 };
-
-            public override string ToString()
-                => $"({First.ToString()} {Operator} {Second.ToString()})";
         }
     }
 }
