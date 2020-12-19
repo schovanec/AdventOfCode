@@ -10,53 +10,86 @@ namespace Day18
         static void Main(string[] args)
         {
             var file = args.DefaultIfEmpty("input.txt").First();
-            var expressions = File.ReadLines(file)
-                                  .Select(x => Expression.Parse(x))
-                                  .ToList();
 
-            var sum = expressions.Select(x => x.Evaluate()).Sum();
-            Console.WriteLine($"Part 1 Result = {sum}");
+            var input = File.ReadAllLines(file);
+
+            var result1 = input.Select(x => Expression.Parse(x))
+                               .Select(x => x.Evaluate())
+                               .Sum();
+            Console.WriteLine($"Part 1 Result = {result1}");
+
+            var result2 = input.Select(x => Expression.Parse(x, true))
+                               .Select(x => x.Evaluate())
+                               .Sum();
+            Console.WriteLine($"Part 1 Result = {result2}");
         }
 
         abstract record Expression()
         {
             public abstract long Evaluate();
 
-            public static Expression Parse(ReadOnlySpan<char> input, bool )
+            public static Expression Parse(ReadOnlySpan<char> input, bool timesSplitsTerms = false)
             {
-                var stack = new Stack<(Expression expression, char? op)>();
+                var stack = new Stack<(Expression expression, char? op, bool paren)>();
                 var lastExpression = default(Expression);
                 var lastOperator = default(char?);
+
+                void CombineWithLast(Expression current)
+                {
+                    lastExpression = lastExpression == null
+                        ? current
+                        : new OperatorExpression(
+                            lastOperator ?? throw new FormatException(),
+                            lastExpression,
+                            current);
+                }
+
+                void PopAll()
+                {
+                    bool paren = false;
+                    while (!paren && stack.Count > 0)
+                    {
+                        var current = lastExpression;
+                        (lastExpression, lastOperator, paren) = stack.Pop();
+
+                        CombineWithLast(current);
+                    }
+                }
+
                 while (input.Length > 0)
                 {
                     var ch = input[0];
                     switch (ch)
                     {
                         case '+':
-                        case '*':
-                            lastOperator = ch;
                             input = input.Slice(1);
+                            lastOperator = ch;
+                            break;
+
+                        case '*':
+                            input = input.Slice(1);
+                            if (timesSplitsTerms)
+                            {
+                                stack.Push((lastExpression, ch, false));
+                                lastExpression = null;
+                            }
+                            else
+                            {
+                                lastOperator = ch;
+                            }
                             break;
 
                         case '(':
-                            stack.Push((lastExpression, lastOperator));
+                            input = input.Slice(1);
+                            stack.Push((lastExpression, lastOperator, true));
                             lastExpression = null;
                             lastOperator = null;
-                            input = input.Slice(1);
                             break;
 
                         case ')':
-                            var (prevLastExp, prevOp) = stack.Pop();
-                            if (prevLastExp != null)
-                            {
-                                lastExpression = new OperatorExpression(
-                                    prevOp ?? throw new FormatException(),
-                                    prevLastExp,
-                                    lastExpression);
-                            
-                                lastOperator = null;
-                            }
                             input = input.Slice(1);
+                            PopAll();
+                            lastOperator = null;
                             break;
 
                         case ' ':
@@ -64,26 +97,18 @@ namespace Day18
                             break;
 
                         case char when char.IsDigit(ch):
-                            var numberExpression = new UnitExpression(ParseNumber(input, out input));
-                            if (lastExpression != null)
-                            {
-                                lastExpression = new OperatorExpression(
-                                    lastOperator ?? throw new FormatException(),
-                                    lastExpression,
-                                    numberExpression);
-
-                                lastOperator = null;
-                            }
-                            else
-                            {
-                                lastExpression = numberExpression;
-                            }
+                            CombineWithLast(new UnitExpression(ParseNumber(input, out input)));
                             break;
 
                         default:
                             throw new FormatException();
                     }
                 }
+
+                PopAll();
+
+                if (stack.Count > 0)
+                    throw new FormatException();
 
                 return lastExpression;
             }
@@ -105,6 +130,9 @@ namespace Day18
         record UnitExpression(long Value) : Expression
         {
             public override long Evaluate() => Value;
+
+            public override string ToString()
+                => Value.ToString();
         }
 
         record OperatorExpression(char Operator, Expression First, Expression Second) : Expression
@@ -116,6 +144,9 @@ namespace Day18
                     '*' => First.Evaluate() * Second.Evaluate(),
                     _   => throw new InvalidOperationException()
                 };
+
+            public override string ToString()
+                => $"({First.ToString()} {Operator} {Second.ToString()})";
         }
     }
 }
