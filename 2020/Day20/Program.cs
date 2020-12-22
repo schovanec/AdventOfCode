@@ -14,34 +14,25 @@ namespace Day20
             var file = args.DefaultIfEmpty("input.txt").First();
             var images = ParseInput(File.ReadLines(file)).ToImmutableList();
 
-            Part1(images);
-            Part2(images);
-        }
-
-        private static void Part1(ImmutableList<Image> images)
-        {
-            var lookup = (from img in images
-                          from edge in img.Edges.All
-                          select (img, edge)).ToLookup(x => x.edge, x => x.img);
-
-            var corners = (from img in images
-                           from edge in img.Edges.All
-                           from m in lookup[edge]
-                           where m != img
-                           group m by img into g
-                           where g.Distinct().Count() == 2
-                           select g.Key);
-
-            foreach (var corner in corners)
-                Console.WriteLine(corner.Id);
-
-            var result1 = corners.Aggregate(1L, (p, x) => p * x.Id);
-            Console.WriteLine($"Part 1 Result = {result1}");
-        }
-
-        private static void Part2(IReadOnlyList<Image> images)
-        {
             var grid = Arrange(images);
+
+            Part1(grid);
+            Part2(grid);
+        }
+
+        private static void Part1(ImmutableArray<ImmutableArray<Image>> grid)
+        {
+            var result = 1L
+                       * grid.First().First().Id
+                       * grid.First().Last().Id
+                       * grid.Last().First().Id
+                       * grid.Last().Last().Id;
+
+            Console.WriteLine($"Part 1 Result = {result}");
+        }
+
+        private static void Part2(ImmutableArray<ImmutableArray<Image>> grid)
+        {
             var result = (from map in EnumMapVariations(Join(grid))
                           let occupied = FindMonsters(map)
                           where occupied.Count > 0
