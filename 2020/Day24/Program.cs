@@ -16,6 +16,10 @@ namespace Day24
 
             var blackTiles = FindBlackTiles(input);
             Console.WriteLine($"Part 1 Result = {blackTiles.Count}");
+
+            var finalBlackTiles = Enumerable.Range(1, 100)
+                                            .Aggregate(blackTiles, (t, _) => FlipTiles(t));
+            Console.WriteLine($"Part 2 Result = {finalBlackTiles.Count}");
         }
 
         static ImmutableHashSet<(int x, int y)> FindBlackTiles(IEnumerable<ImmutableList<Step>> input)
@@ -24,28 +28,7 @@ namespace Day24
 
             foreach (var item in input)
             {
-                var pt = (x: 0, y: 0);
-                foreach (var step in item)
-                {
-                    var even = pt.y % 2 == 0;
-                    pt = step switch 
-                    {
-                        Step.East => (pt.x - 1, pt.y),
-                        Step.West => (pt.x + 1, pt.y),
-
-                        Step.SouthEast when even => (pt.x, pt.y + 1),
-                        Step.SouthEast when !even => (pt.x - 1, pt.y + 1),
-                        Step.SouthWest when even => (pt.x + 1, pt.y + 1),
-                        Step.SouthWest when !even => (pt.x, pt.y + 1),
-
-                        Step.NorthEast when even => (pt.x, pt.y - 1),
-                        Step.NorthEast when !even => (pt.x - 1, pt.y - 1),
-                        Step.NorthWest when even => (pt.x + 1, pt.y - 1),
-                        Step.NorthWest when !even => (pt.x, pt.y - 1),
-                        
-                        _ => throw new InvalidOperationException()
-                    };
-                }
+                var pt = item.Aggregate((0, 0), MovePoint);
 
                 if (blackTiles.Contains(pt))
                     blackTiles.Remove(pt);
@@ -54,6 +37,63 @@ namespace Day24
             }
 
             return blackTiles.ToImmutable();
+        }
+
+        static ImmutableHashSet<(int x, int y)> FlipTiles(ImmutableHashSet<(int x, int y)> blackTiles)
+        {
+            var result = ImmutableHashSet.CreateBuilder<(int x, int y)>();
+            var whiteTilesToCheck = new HashSet<(int x, int y)>();
+
+            foreach (var pt in blackTiles)
+            {
+                var adjacentWhiteTiles = FindAdjacentTiles(pt).Where(t => !blackTiles.Contains(t)).ToArray();
+                if (adjacentWhiteTiles.Length < 6 && adjacentWhiteTiles.Length >= 4)
+                    result.Add(pt);
+
+                foreach (var wpt in adjacentWhiteTiles)
+                    whiteTilesToCheck.Add(wpt);
+            }
+
+            foreach (var pt in whiteTilesToCheck)
+            {
+                var adjacentBlackTiles = FindAdjacentTiles(pt).Count(blackTiles.Contains);
+                if (adjacentBlackTiles == 2)
+                    result.Add(pt);
+            }
+
+            return result.ToImmutable();
+        }
+
+        static IEnumerable<(int x, int y)> FindAdjacentTiles((int x, int y) pt)
+        {
+            yield return MovePoint(pt, Step.East);
+            yield return MovePoint(pt, Step.NorthEast);
+            yield return MovePoint(pt, Step.NorthWest);
+            yield return MovePoint(pt, Step.West);
+            yield return MovePoint(pt, Step.SouthWest);
+            yield return MovePoint(pt, Step.SouthEast);
+        }
+
+        static (int x, int y) MovePoint((int x, int y) pt, Step step)
+        {
+            var even = pt.y % 2 == 0;
+            return step switch 
+            {
+                Step.East => (pt.x - 1, pt.y),
+                Step.West => (pt.x + 1, pt.y),
+
+                Step.SouthEast when even => (pt.x, pt.y + 1),
+                Step.SouthEast when !even => (pt.x - 1, pt.y + 1),
+                Step.SouthWest when even => (pt.x + 1, pt.y + 1),
+                Step.SouthWest when !even => (pt.x, pt.y + 1),
+
+                Step.NorthEast when even => (pt.x, pt.y - 1),
+                Step.NorthEast when !even => (pt.x - 1, pt.y - 1),
+                Step.NorthWest when even => (pt.x + 1, pt.y - 1),
+                Step.NorthWest when !even => (pt.x, pt.y - 1),
+                
+                _ => throw new InvalidOperationException()
+            };
         }
 
         static ImmutableList<Step> ParseSteps(string steps)
