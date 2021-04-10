@@ -23,10 +23,11 @@ namespace Day05
 
         private static void Part2(string input)
         {
-            var best = (from u1 in input.ToLower().Distinct()
-                        let u2 = char.ToUpper(u1)
-                        let r = ReactPolymer(input.Where(ch => ch != u1 && ch != u2))
-                        select r.Count()).Min();
+            var best = input.ToLower()
+                            .Distinct()
+                            .Select(u => input.Where(ch => char.ToLower(ch) != u))
+                            .Select(ReactPolymer)
+                            .Min(p => p.Count());
 
             Console.WriteLine($"Part 2 Result = {best}");
         }
