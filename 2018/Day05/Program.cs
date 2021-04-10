@@ -26,10 +26,9 @@ namespace Day05
             var best = (from u1 in input.ToLower().Distinct()
                         let u2 = char.ToUpper(u1)
                         let r = ReactPolymer(input.Where(ch => ch != u1 && ch != u2))
-                        orderby r.Count()
-                        select r).First();
+                        select r.Count()).Min();
 
-            Console.WriteLine($"Part 2 Result = {best.Count()}");
+            Console.WriteLine($"Part 2 Result = {best}");
         }
 
         private static IEnumerable<char> ReactPolymer(IEnumerable<char> input)
