@@ -43,18 +43,21 @@ namespace Day02
 
         private static (string, string) FindPairWithOneDifferentLetter(IEnumerable<string> ids)
         {
-            var sorted = ids.OrderBy(x => x).ToList();
-            return sorted.Zip(sorted.Skip(1))
-                         .Where(x => HasSingleDifferentLetter(x.First, x.Second))
-                         .First();
+            string previous = null;
+            foreach (var id in ids.OrderBy(x => x))
+            {
+                if (previous != null && HasSingleDifferentLetter(previous, id))
+                    return (previous, id);
+
+                previous = id;
+            }
+
+            throw new Exception("Not Found!");
         }
 
         private static bool HasSingleDifferentLetter(string first, string second)
-        {
-            var common = GetCommonLetters(first, second).Count();
-            return common == first.Length - 1
-                && common == second.Length - 1;
-        }
+            => first.Length == second.Length
+            && GetCommonLetters(first, second).Count() == first.Length - 1;
 
         private static IEnumerable<char> GetCommonLetters(string first, string second)
             => first.Zip(second)
