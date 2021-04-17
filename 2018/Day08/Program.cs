@@ -39,28 +39,8 @@ namespace Day08
         }
 
         private static IEnumerable<int> ParseInput(string input)
-        {
-            var start = -1;
-            var current = 0;
-            while (current < input.Length)
-            {
-                if (char.IsDigit(input[current]))
-                {
-                    if (start < 0)
-                        start = current;
-                }
-                else if (start >= 0 && current > start)
-                {
-                    yield return int.Parse(input.AsSpan().Slice(start, current - start));
-                    start = -1;
-                }
-
-                ++current;                
-            }
-
-            if (start >= 0 && current > start)
-                yield return int.Parse(input.AsSpan().Slice(start, current - start));
-        }
+            => input.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(int.Parse);
 
         record Node(ImmutableArray<Node> Children, ImmutableArray<int> Metadata)
         {
