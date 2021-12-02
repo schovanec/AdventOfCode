@@ -15,3 +15,9 @@ var count2 = sums.Zip(sums.Skip(1))
                  .Count(x => x.First < x.Second);
 
 Console.WriteLine($"Part 2 Result = {count2}");
+
+// alternate method for part 2:
+var count2b = input.Zip(input.Skip(3))
+                   .Count(x => x.First < x.Second);
+
+Console.WriteLine($"Part 2 Result (Alternate Method) = {count2b}");
