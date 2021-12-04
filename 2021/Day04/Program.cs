@@ -71,7 +71,7 @@ record Board(ImmutableArray<int> Numbers)
   public const int Size = 5;
 
   public int At(int col, int row)
-    => Numbers[(row * 5) + col];
+    => Numbers[(row * Size) + col];
 
   public bool HasMarkedRow(IReadOnlySet<int> called)
     => Enumerable.Range(0, Size)
