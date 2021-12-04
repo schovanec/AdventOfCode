@@ -33,8 +33,8 @@ Console.WriteLine($"Part 2 Result = {lastWinnerScore}");
   var numbers = ParseAllNumbers(input.Take(1), ',').ToImmutableList();
 
   var boards = Split(input.Skip(1), string.IsNullOrWhiteSpace)
-    .Select(g => new Board(ParseAllNumbers(g, ' ')
-    .ToImmutableArray())).ToImmutableList();
+    .Select(g => new Board(ParseAllNumbers(g, ' ').ToImmutableArray()))
+    .ToImmutableList();
 
   return (numbers, boards);
 }
