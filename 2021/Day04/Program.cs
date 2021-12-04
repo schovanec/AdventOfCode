@@ -1,6 +1,6 @@
 ﻿using System.Collections.Immutable;
 
-var (numbers, boards) = ParseInput(File.ReadLines(args.FirstOrDefault() ?? "input.txt"));
+var (numbers, boards) = ParseInput(File.ReadAllLines(args.FirstOrDefault() ?? "input.txt"));
 
 var called = new HashSet<int>();
 var firstWinnerScore = default(int?);
@@ -11,7 +11,7 @@ foreach (var number in numbers)
     break;
 
   called.Add(number);
-  var winners = FindWinningBoards(boards, called);
+  var winners = boards.Where(b => b.IsWinning(called));
   var anyWinner = winners.FirstOrDefault();
 
   if (anyWinner != null)
@@ -28,35 +28,30 @@ foreach (var number in numbers)
 Console.WriteLine($"Part 1 Result = {firstWinnerScore}");
 Console.WriteLine($"Part 2 Result = {lastWinnerScore}");
 
-IEnumerable<Board> FindWinningBoards(IEnumerable<Board> boards, IReadOnlySet<int> called)
-  => boards.Where(b => b.IsWinning(called));
-
-(ImmutableList<int> numbers, ImmutableList<Board> boards) ParseInput(IEnumerable<string> input)
+(ImmutableList<int> numbers, ImmutableList<Board> boards) ParseInput(IList<string> input)
 {
-  var numbers = ImmutableList<int>.Empty;
-  var boards = ImmutableList.CreateBuilder<Board>();
+  var numbers = ParseAllNumbers(input.Take(1), ',').ToImmutableList();
 
+  var boards = ImmutableList.CreateBuilder<Board>();
   var buffer = new List<string>();
-  foreach (var line in input)
+  foreach (var line in input.Skip(1))
   {
     if (string.IsNullOrWhiteSpace(line))
-      ProcessBuffer();
+      AddBoard();
     else
       buffer.Add(line);
   }
 
-  ProcessBuffer();
+  AddBoard();
 
   return (
     numbers,
     boards.ToImmutable()
   );
 
-  void ProcessBuffer()
+  void AddBoard()
   {
-    if (numbers.IsEmpty)
-      numbers = ParseAllNumbers(buffer, ',').ToImmutableList();
-    else if (buffer.Count > 0)
+    if (buffer.Count > 0)
       boards.Add(new Board(ParseAllNumbers(buffer, ' ').ToImmutableArray()));
 
     buffer.Clear();
@@ -77,6 +72,7 @@ record Board(ImmutableArray<int> Numbers)
   public bool HasMarkedRow(IReadOnlySet<int> called)
     => Enumerable.Range(0, Size)
                  .Any(i => IsMarkedRow(i, called));
+
   public bool IsMarkedRow(int row, IReadOnlySet<int> called)
     => Enumerable.Range(0, Size)
                  .All(i => called.Contains(At(i, row)));
@@ -84,6 +80,7 @@ record Board(ImmutableArray<int> Numbers)
   public bool HasMarkedColumn(IReadOnlySet<int> called)
     => Enumerable.Range(0, Size)
                  .Any(i => IsMarkedColumn(i, called));
+
   public bool IsMarkedColumn(int column, IReadOnlySet<int> called)
     => Enumerable.Range(0, Size)
                  .All(i => called.Contains(At(column, i)));
