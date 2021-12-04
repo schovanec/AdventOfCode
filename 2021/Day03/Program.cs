@@ -17,21 +17,19 @@ var scrubberRating = ParseBitString(scrubberRatingString);
 
 Console.WriteLine($"Part 2 Result = {oxygenRating * scrubberRating}");
 
-char FindMostCommon(ICollection<string> input, int index)
-{
-  var count1 = input.Count(x => x[index] == '1');
-  var count0 = input.Count - count1;
-  return count1 >= count0 ? '1' : '0';
-}
+char FindMostCommon(IEnumerable<string> input, int index)
+  => input.GroupBy(x => x[index])
+          .OrderByDescending(g => g.Count())
+          .ThenByDescending(g => g.Key)
+          .Select(g => g.Key)
+          .FirstOrDefault();
 
-char FindLeastCommon(ICollection<string> input, int index) => InvertBitChar(FindMostCommon(input, index));
-
-char InvertBitChar(char bit) => bit switch
-{
-  '1' => '0',
-  '0' => '1',
-  _ => throw new ArgumentException($"Invalid bit '{bit}'", nameof(bit))
-};
+char FindLeastCommon(IEnumerable<string> input, int index)
+  => input.GroupBy(x => x[index])
+          .OrderBy(g => g.Count())
+          .ThenBy(g => g.Key)
+          .Select(g => g.Key)
+          .FirstOrDefault();
 
 int ParseBits(IEnumerable<char> bits)
   => ParseBitString(string.Concat(bits));
