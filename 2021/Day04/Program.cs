@@ -11,8 +11,8 @@ foreach (var number in numbers)
     break;
 
   called.Add(number);
-  var winners = boards.Where(b => b.IsWinning(called));
-  var anyWinner = winners.FirstOrDefault();
+  var allWinners = boards.Where(b => b.IsWinning(called));
+  var anyWinner = allWinners.FirstOrDefault();
 
   if (anyWinner != null)
   {
@@ -21,7 +21,7 @@ foreach (var number in numbers)
 
     lastWinnerScore = anyWinner.CalculateScore(called, number);
 
-    boards = boards.RemoveRange(winners);
+    boards = boards.RemoveRange(allWinners);
   }
 }
 
@@ -32,30 +32,34 @@ Console.WriteLine($"Part 2 Result = {lastWinnerScore}");
 {
   var numbers = ParseAllNumbers(input.Take(1), ',').ToImmutableList();
 
-  var boards = ImmutableList.CreateBuilder<Board>();
-  var buffer = new List<string>();
-  foreach (var line in input.Skip(1))
+  var boards = Split(input.Skip(1), string.IsNullOrWhiteSpace)
+    .Select(g => new Board(ParseAllNumbers(g, ' ')
+    .ToImmutableArray())).ToImmutableList();
+
+  return (numbers, boards);
+}
+
+IEnumerable<IEnumerable<T>> Split<T>(IEnumerable<T> array, Predicate<T> predicate)
+{
+  var buffer = ImmutableArray.CreateBuilder<T>();
+  foreach (var item in array)
   {
-    if (string.IsNullOrWhiteSpace(line))
-      AddBoard();
+    if (predicate(item))
+    {
+      if (buffer.Count > 0)
+      {
+        yield return buffer.ToImmutable();
+        buffer.Clear();
+      }
+    }
     else
-      buffer.Add(line);
+    {
+      buffer.Add(item);
+    }
   }
 
-  AddBoard();
-
-  return (
-    numbers,
-    boards.ToImmutable()
-  );
-
-  void AddBoard()
-  {
-    if (buffer.Count > 0)
-      boards.Add(new Board(ParseAllNumbers(buffer, ' ').ToImmutableArray()));
-
-    buffer.Clear();
-  }
+  if (buffer.Count > 0)
+    yield return buffer.ToImmutable();
 }
 
 IEnumerable<int> ParseAllNumbers(IEnumerable<string> lines, char separator)
