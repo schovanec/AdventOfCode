@@ -2,13 +2,10 @@
 
 var input = File.ReadLines(args.FirstOrDefault() ?? "input.txt").ToImmutableList();
 
-var gammaString = string.Concat(Enumerable.Range(0, input.First().Length)
-                                          .Select(i => FindMostCommon(input, i)));
+var indexes = Enumerable.Range(0, input.First().Length);
 
-var epsilonString = string.Concat(gammaString.Select(InvertBitChar));
-
-var gamma = ParseBitString(gammaString);
-var epsilon = ParseBitString(epsilonString);
+var gamma = ParseBits(indexes.Select(i => FindMostCommon(input, i)));
+var epsilon = ParseBits(indexes.Select(i => FindLeastCommon(input, i)));
 
 Console.WriteLine($"Part 1 Result = {gamma * epsilon}");
 
@@ -36,8 +33,11 @@ char InvertBitChar(char bit) => bit switch
   _ => throw new ArgumentException($"Invalid bit '{bit}'", nameof(bit))
 };
 
+int ParseBits(IEnumerable<char> bits)
+  => ParseBitString(string.Concat(bits));
+
 int ParseBitString(string bits)
-  => bits.Aggregate(0, (n, ch) => (n * 2) + (ch == '1' ? 1 : 0));
+  => Convert.ToInt32(bits, 2);
 
 ImmutableList<string> FilterList(ImmutableList<string> input, Func<ImmutableList<string>, int, char> selector)
 {
