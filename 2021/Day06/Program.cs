@@ -3,19 +3,17 @@
                 .Select(int.Parse)
                 .ToList();
 
-var fish = new long[9];
-foreach (var age in input)
-  fish[age]++;
+Console.WriteLine($"Part 1 Result = {CountFish(input, 80)}");
+Console.WriteLine($"Part 2 Result = {CountFish(input, 256)}");
 
-for (var i = 0; i < 256; ++i)
+long CountFish(IEnumerable<int> input, int generations)
 {
-  var zeroIndex = (i % 9);
-  var spawnAtIndex = ((i + 7) % 9);
+  var fish = new long[9];
+  foreach (var age in input)
+    fish[age]++;
 
-  fish[spawnAtIndex] += fish[zeroIndex];
+  for (var i = 0; i < generations; ++i)
+    fish[(i + 7) % 9] += fish[i % 9];
 
-  if (i + 1 == 80)
-    Console.WriteLine($"Part 1 Result = {fish.Sum()}");
+  return fish.Sum();
 }
-
-Console.WriteLine($"Part 2 Result = {fish.Sum()}");
