@@ -1,6 +1,4 @@
-﻿using System.Collections.Immutable;
-
-var edges = File.ReadLines(args.FirstOrDefault() ?? "input.txt")
+﻿var edges = File.ReadLines(args.FirstOrDefault() ?? "input.txt")
                 .Select(x => x.Split('-'))
                 .SelectMany(x => new[] { (from: x[0], to: x[1]), (from: x[1], to: x[0]) })
                 .ToLookup(x => x.from, x => x.to);
