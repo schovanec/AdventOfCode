@@ -49,12 +49,10 @@ IEnumerable<(int step, int flashCount)> Simulate(Board board)
 }
 
 IEnumerable<int> EnumAdjacentIndexes(int index, int width, int height)
-  => from i in Enumerable.Range(-1, 3)
-     from j in Enumerable.Range(-1, 3)
-     where i != 0 || j != 0
-     let pt = (x: (index % width) + i, y: (index / width) + j)
-     where pt.x >= 0 && pt.x < width && pt.y >= 0 && pt.y < height
-     select (pt.y * width) + pt.x;
+  => from x in Enumerable.Range((index % width) - 1, 3)
+     from y in Enumerable.Range((index / width) - 1, 3)
+     where x >= 0 && x < width && y >= 0 && y < height
+     select (y * width) + x;
 
 record Board(ImmutableArray<int> EnergyLevels, int Width)
 {
