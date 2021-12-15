@@ -17,11 +17,9 @@ int FindLowestRiskPathLength(Map map, (int x, int y) from, (int x, int y) to)
 
   while (dist.Count > seen.Count)
   {
-    var (pt, cost) = (from x in ready
-                      where !seen.Contains(x)
-                      let d = dist.GetValueOrDefault(x, int.MaxValue)
-                      orderby d
-                      select (x, d)).First();
+    var (pt, cost) = ready.Where(x => !seen.Contains(x))
+                          .Select(x => (pt: x, dist: dist.GetValueOrDefault(x, int.MaxValue)))
+                          .MinBy(x => x.dist);
 
     ready.Remove(pt);
     seen.Add(pt);
