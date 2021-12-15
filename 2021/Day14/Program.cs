@@ -23,8 +23,7 @@ Polymer RunPairInsertion(int steps,
                          ImmutableDictionary<(char a, char b), char> rules,
                          Dictionary<(int steps, (char a, char b) pair), Polymer> cache)
 {
-  Polymer? result;
-  if (!cache.TryGetValue((steps, pair), out result))
+  if (!cache.TryGetValue((steps, pair), out var result))
   {
     var ch = rules[pair];
     result = Polymer.FromElement(ch);
