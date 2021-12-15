@@ -11,30 +11,31 @@ Console.WriteLine($"Part 2 Result = {lowestRisk2}");
 
 int FindLowestRiskPathLength(Map map, (int x, int y) from, (int x, int y) to)
 {
-  var seen = new HashSet<(int x, int y)>();
-  var ready = new HashSet<(int x, int y)>() { from };
   var dist = new Dictionary<(int x, int y), int> { [from] = 0 };
+  var visited = new HashSet<(int x, int y)>();
+  var queue = new PriorityQueue<(int x, int y), int>();
 
-  while (dist.Count > seen.Count)
+  queue.Enqueue(from, 0);
+  while (queue.Count > 0)
   {
-    var (pt, cost) = ready.Where(x => !seen.Contains(x))
-                          .Select(x => (pt: x, dist: dist.GetValueOrDefault(x, int.MaxValue)))
-                          .MinBy(x => x.dist);
+    var pt = queue.Dequeue();
+    if (visited.Contains(pt))
+      continue;
 
-    ready.Remove(pt);
-    seen.Add(pt);
+    visited.Add(pt);
 
     if (to == pt)
       break;
 
-    var adjacent = map.GetAdjacent(pt.x, pt.y).Where(x => !seen.Contains(x));
+    var adjacent = map.GetAdjacent(pt.x, pt.y).Where(x => !visited.Contains(x));
+    var cost = dist[pt];
     foreach (var next in adjacent)
     {
-      ready.Add(next);
       var alt = cost + map[next.x, next.y];
       if (alt < dist.GetValueOrDefault(next, int.MaxValue))
       {
         dist[next] = alt;
+        queue.Enqueue(next, alt);
       }
     }
   }
