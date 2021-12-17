@@ -2,8 +2,7 @@
 using System.Globalization;
 using System.Text;
 
-var inputs = File.ReadLines(args.FirstOrDefault() ?? "input.txt")
-                .Select(ParseHex);
+var inputs = File.ReadLines(args.FirstOrDefault() ?? "input.txt").Select(ParseHex);
 
 foreach (var input in inputs)
 {
