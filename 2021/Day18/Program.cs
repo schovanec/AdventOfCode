@@ -37,9 +37,9 @@ bool TryExplodeInternal(SnailfishNode node,
 {
   switch (node)
   {
-    case PairNode(NumberNode left, NumberNode right) when depth == 4:
+    case PairNode(NumberNode(var left), NumberNode(var right)) when depth == 4:
       replacement = new NumberNode(0);
-      exploded = (left.Value, right.Value);
+      exploded = (left, right);
       return true;
 
     case PairNode(var left, var right) when TryExplodeInternal(left, depth + 1, out left, out exploded):
