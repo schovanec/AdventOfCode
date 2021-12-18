@@ -28,7 +28,7 @@ bool TryReduce(SnailfishNode node, [NotNullWhen(true)] out SnailfishNode? reduce
   => TryExplode(node, out reduced) || TrySplit(node, out reduced);
 
 bool TryExplode(SnailfishNode node, [NotNullWhen(true)] out SnailfishNode? replacement)
-  => TryExplodeInternal(node, 0, out replacement, out var exploded);
+  => TryExplodeInternal(node, 0, out replacement, out _);
 
 bool TryExplodeInternal(SnailfishNode node,
                         int depth,
@@ -37,23 +37,29 @@ bool TryExplodeInternal(SnailfishNode node,
 {
   switch (node)
   {
-    case PairNode { Left: NumberNode a, Right: NumberNode b } when depth == 4:
+    case PairNode(NumberNode left, NumberNode right) when depth == 4:
       replacement = new NumberNode(0);
-      exploded = (a.Value, b.Value);
+      exploded = (left.Value, right.Value);
       return true;
 
-    case PairNode pair when TryExplodeInternal(pair.Left, depth + 1, out var left, out exploded):
-      replacement = exploded.right is int rightValue
-        ? new PairNode(left, AddToFirstNumber(pair.Right, rightValue))
-        : pair with { Left = left };
-      exploded.right = null;
+    case PairNode(var left, var right) when TryExplodeInternal(left, depth + 1, out left, out exploded):
+      if (exploded.right is int rightValue)
+      {
+        right = AddToFirstNumber(right, rightValue);
+        exploded.right = null;
+      }
+
+      replacement = new PairNode(left, right);
       return true;
 
-    case PairNode pair when TryExplodeInternal(pair.Right, depth + 1, out var right, out exploded):
-      replacement = exploded.left is int leftValue
-        ? new PairNode(AddToLastNumber(pair.Left, leftValue), right)
-        : pair with { Right = right };
-      exploded.left = null;
+    case PairNode(var left, var right) when TryExplodeInternal(right, depth + 1, out right, out exploded):
+      if (exploded.left is int leftValue)
+      {
+        left = AddToLastNumber(left, leftValue);
+        exploded.left = null;
+      }
+
+      replacement = new PairNode(left, right);
       return true;
 
     default:
@@ -67,18 +73,18 @@ bool TrySplit(SnailfishNode node, [NotNullWhen(true)] out SnailfishNode? replace
 {
   switch (node)
   {
-    case NumberNode number when number.Value >= 10:
+    case NumberNode(var value) when value >= 10:
       replacement = new PairNode(
-        new NumberNode((int)Math.Floor(number.Value / 2.0m)),
-        new NumberNode((int)Math.Ceiling(number.Value / 2.0m)));
+        new NumberNode((int)Math.Floor(value / 2.0m)),
+        new NumberNode((int)Math.Ceiling(value / 2.0m)));
       return true;
 
-    case PairNode pair when TrySplit(pair.Left, out var left):
-      replacement = pair with { Left = left };
+    case PairNode(var left, var right) pair when TrySplit(left, out left):
+      replacement = new PairNode(left, right);
       return true;
 
-    case PairNode pair when TrySplit(pair.Right, out var right):
-      replacement = pair with { Right = right };
+    case PairNode(var left, var right) pair when TrySplit(right, out right):
+      replacement = new PairNode(left, right);
       return true;
 
     default:
@@ -87,44 +93,48 @@ bool TrySplit(SnailfishNode node, [NotNullWhen(true)] out SnailfishNode? replace
   }
 }
 
-SnailfishNode AddToFirstNumber(SnailfishNode node, int value)
-  => TryAddToFirstNumber(node, value, out var added) ? added : node;
+SnailfishNode AddToFirstNumber(SnailfishNode node, int amountToAdd)
+  => TryAddToFirstNumber(node, amountToAdd, out var replacement) ? replacement : node;
 
-bool TryAddToFirstNumber(SnailfishNode node, int value, [NotNullWhen(true)] out SnailfishNode? added)
+bool TryAddToFirstNumber(SnailfishNode node,
+                         int amountToAdd,
+                         [NotNullWhen(true)] out SnailfishNode? replacement)
 {
   switch (node)
   {
-    case NumberNode number:
-      added = new NumberNode(number.Value + value);
+    case NumberNode(var value):
+      replacement = new NumberNode(value + amountToAdd);
       return true;
 
-    case PairNode pair when TryAddToFirstNumber(pair.Left, value, out var left):
-      added = new PairNode(left, pair.Right);
+    case PairNode(var left, var right) when TryAddToFirstNumber(left, amountToAdd, out left):
+      replacement = new PairNode(left, right);
       return true;
 
     default:
-      added = default;
+      replacement = default;
       return false;
   }
 }
 
-SnailfishNode AddToLastNumber(SnailfishNode node, int value)
-  => TryAddToLastNumber(node, value, out var added) ? added : node;
+SnailfishNode AddToLastNumber(SnailfishNode node, int amountToAdd)
+  => TryAddToLastNumber(node, amountToAdd, out var replacement) ? replacement : node;
 
-bool TryAddToLastNumber(SnailfishNode root, int value, [NotNullWhen(true)] out SnailfishNode? added)
+bool TryAddToLastNumber(SnailfishNode root,
+                        int amountToAdd,
+                        [NotNullWhen(true)] out SnailfishNode? replacement)
 {
   switch (root)
   {
-    case NumberNode number:
-      added = new NumberNode(number.Value + value);
+    case NumberNode(var value):
+      replacement = new NumberNode(value + amountToAdd);
       return true;
 
-    case PairNode pair when TryAddToLastNumber(pair.Right, value, out var right):
-      added = new PairNode(pair.Left, right);
+    case PairNode(var left, var right) when TryAddToLastNumber(right, amountToAdd, out right):
+      replacement = new PairNode(left, right);
       return true;
 
     default:
-      added = default;
+      replacement = default;
       return false;
   }
 }
@@ -132,7 +142,7 @@ bool TryAddToLastNumber(SnailfishNode root, int value, [NotNullWhen(true)] out S
 int CalculateMagnitude(SnailfishNode node)
   => node switch
   {
-    NumberNode number => number.Value,
+    NumberNode(var value) => value,
     PairNode(var left, var right) => (3 * CalculateMagnitude(left)) + (2 * CalculateMagnitude(right)),
     _ => 0
   };
