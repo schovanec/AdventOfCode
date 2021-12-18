@@ -73,10 +73,8 @@ bool TrySplit(SnailfishNode node, [NotNullWhen(true)] out SnailfishNode? reduced
 {
   switch (node)
   {
-    case NumberNode(var value) when value >= 10:
-      reduced = new PairNode(
-        new NumberNode((int)Math.Floor(value / 2.0m)),
-        new NumberNode((int)Math.Ceiling(value / 2.0m)));
+    case NumberNode(>= 10) number:
+      reduced = Split(number);
       return true;
 
     case PairNode(var left, var right) pair when TrySplit(left, out left):
@@ -92,6 +90,10 @@ bool TrySplit(SnailfishNode node, [NotNullWhen(true)] out SnailfishNode? reduced
       return false;
   }
 }
+
+PairNode Split(NumberNode number)
+  => new PairNode(new NumberNode((int)Math.Floor(number.Value / 2.0m)),
+                  new NumberNode((int)Math.Ceiling(number.Value / 2.0m)));
 
 SnailfishNode AddToFirstNumber(SnailfishNode node, int amountToAdd)
   => TryAddToFirstNumber(node, amountToAdd, out var updated) ? updated : node;
