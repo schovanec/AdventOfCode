@@ -1,12 +1,143 @@
-﻿var input = File.ReadAllLines(args.FirstOrDefault() ?? "input.txt");
+﻿using System.Diagnostics.CodeAnalysis;
 
-var result1 = input.Select(Node.Parse).Aggregate(AddNodes);
-Console.WriteLine($"Part 1 Result = {result1?.GetMagnitude()}");
+var input = File.ReadLines(args.FirstOrDefault() ?? "input.txt")
+                .Select(SnailfishNode.Parse)
+                .ToList()
+                .AsReadOnly();
 
-var result2 = EnumPairs(input).Max(x => AddSnailfishNumbers(x.first, x.second).GetMagnitude());
+var result1 = CalculateMagnitude(input.Aggregate(Add));
+Console.WriteLine($"Part 1 Result = {result1}");
+
+var result2 = EnumPairs(input).Select(x => Add(x.first, x.second))
+                              .Max(CalculateMagnitude);
 Console.WriteLine($"Part 2 Result = {result2}");
 
-IEnumerable<(string first, string second)> EnumPairs(IList<string> input)
+SnailfishNode Add(SnailfishNode first, SnailfishNode second)
+ => Reduce(new PairNode(first, second));
+
+SnailfishNode Reduce(SnailfishNode node)
+{
+  var result = node;
+  while (TryReduce(result, out var reduced))
+    result = reduced;
+
+  return result;
+}
+
+bool TryReduce(SnailfishNode node, [NotNullWhen(true)] out SnailfishNode? reduced)
+  => TryExplode(node, out reduced) || TrySplit(node, out reduced);
+
+bool TryExplode(SnailfishNode node, [NotNullWhen(true)] out SnailfishNode? replacement)
+  => TryExplodeInternal(node, 0, out replacement, out var exploded);
+
+bool TryExplodeInternal(SnailfishNode node,
+                        int depth,
+                        [NotNullWhen(true)] out SnailfishNode? replacement,
+                        out (int? left, int? right) exploded)
+{
+  switch (node)
+  {
+    case PairNode { Left: NumberNode a, Right: NumberNode b } when depth == 4:
+      replacement = new NumberNode(0);
+      exploded = (a.Value, b.Value);
+      return true;
+
+    case PairNode pair when TryExplodeInternal(pair.Left, depth + 1, out var left, out exploded):
+      replacement = exploded.right is int rightValue
+        ? new PairNode(left, AddToFirstNumber(pair.Right, rightValue))
+        : pair with { Left = left };
+      exploded.right = null;
+      return true;
+
+    case PairNode pair when TryExplodeInternal(pair.Right, depth + 1, out var right, out exploded):
+      replacement = exploded.left is int leftValue
+        ? new PairNode(AddToLastNumber(pair.Left, leftValue), right)
+        : pair with { Right = right };
+      exploded.left = null;
+      return true;
+
+    default:
+      replacement = default;
+      exploded = default;
+      return false;
+  }
+}
+
+bool TrySplit(SnailfishNode node, [NotNullWhen(true)] out SnailfishNode? replacement)
+{
+  switch (node)
+  {
+    case NumberNode number when number.Value >= 10:
+      replacement = new PairNode(
+        new NumberNode((int)Math.Floor(number.Value / 2.0m)),
+        new NumberNode((int)Math.Ceiling(number.Value / 2.0m)));
+      return true;
+
+    case PairNode pair when TrySplit(pair.Left, out var left):
+      replacement = pair with { Left = left };
+      return true;
+
+    case PairNode pair when TrySplit(pair.Right, out var right):
+      replacement = pair with { Right = right };
+      return true;
+
+    default:
+      replacement = default;
+      return false;
+  }
+}
+
+SnailfishNode AddToFirstNumber(SnailfishNode node, int value)
+  => TryAddToFirstNumber(node, value, out var added) ? added : node;
+
+bool TryAddToFirstNumber(SnailfishNode node, int value, [NotNullWhen(true)] out SnailfishNode? added)
+{
+  switch (node)
+  {
+    case NumberNode number:
+      added = new NumberNode(number.Value + value);
+      return true;
+
+    case PairNode pair when TryAddToFirstNumber(pair.Left, value, out var left):
+      added = new PairNode(left, pair.Right);
+      return true;
+
+    default:
+      added = default;
+      return false;
+  }
+}
+
+SnailfishNode AddToLastNumber(SnailfishNode node, int value)
+  => TryAddToLastNumber(node, value, out var added) ? added : node;
+
+bool TryAddToLastNumber(SnailfishNode root, int value, [NotNullWhen(true)] out SnailfishNode? added)
+{
+  switch (root)
+  {
+    case NumberNode number:
+      added = new NumberNode(number.Value + value);
+      return true;
+
+    case PairNode pair when TryAddToLastNumber(pair.Right, value, out var right):
+      added = new PairNode(pair.Left, right);
+      return true;
+
+    default:
+      added = default;
+      return false;
+  }
+}
+
+int CalculateMagnitude(SnailfishNode node)
+  => node switch
+  {
+    NumberNode number => number.Value,
+    PairNode(var left, var right) => (3 * CalculateMagnitude(left)) + (2 * CalculateMagnitude(right)),
+    _ => 0
+  };
+
+IEnumerable<(T first, T second)> EnumPairs<T>(IReadOnlyList<T> input)
 {
   for (var i = 0; i < input.Count - 1; ++i)
   {
@@ -18,125 +149,12 @@ IEnumerable<(string first, string second)> EnumPairs(IList<string> input)
   }
 }
 
-Node AddSnailfishNumbers(string first, string second)
-  => AddNodes(Node.Parse(first), Node.Parse(second));
-
-Node AddNodes(Node first, Node second)
+abstract record SnailfishNode
 {
-  var result = Node.MakePair(first, second);
-  Reduce(result);
-  return result;
-}
-
-void Reduce(Node root)
-{
-  while (TryExplode(root) || TrySplit(root))
-  { }
-}
-
-bool TryExplode(Node? node, int depth = 1)
-{
-  switch (node)
-  {
-    case PairNode { Left: PairNode target } pair when depth == 4:
-      ExplodeNode(target);
-      pair.Left = new NumberNode(0, pair);
-      return true;
-
-    case PairNode pair when TryExplode(pair.Left, depth + 1):
-      return true;
-
-    case PairNode { Right: PairNode target } pair when depth == 4:
-      ExplodeNode(target);
-      pair.Right = new NumberNode(0, pair);
-      return true;
-
-    case PairNode pair when TryExplode(pair.Right, depth + 1):
-      return true;
-
-    default:
-      return false;
-  }
-}
-
-bool TrySplit(Node? node)
-{
-  switch (node)
-  {
-    case PairNode { Left: NumberNode number } pair when number.Value >= 10:
-      pair.Left = SplitNode(number);
-      return true;
-
-    case PairNode pair when TrySplit(pair.Left):
-      return true;
-
-    case PairNode { Right: NumberNode number } pair when number.Value >= 10:
-      pair.Right = SplitNode(number);
-      return true;
-
-    case PairNode pair when TrySplit(pair.Right):
-      return true;
-
-    default:
-      return false;
-  }
-}
-
-void ExplodeNode(PairNode target)
-{
-  if (target.GetPreviousNumber() is NumberNode prev)
-    prev.Value += target.GetFirstNumber()?.Value ?? 0;
-
-  if (target.GetNextNumber() is NumberNode next)
-    next.Value += target.GetLastNumber()?.Value ?? 0;
-}
-
-PairNode SplitNode(NumberNode number)
-  => Node.MakePair(
-      new NumberNode((int)Math.Floor(number.Value / 2.0m)),
-      new NumberNode((int)Math.Ceiling(number.Value / 2.0m)),
-      number.Parent);
-
-
-PairNode? FindPair(Node? root, int depth)
-  => root switch
-  {
-    PairNode pair when depth == 0 => pair,
-    PairNode pair => FindPair(pair.Left, depth - 1) ?? FindPair(pair.Right, depth - 1),
-    _ => null
-  };
-
-abstract class Node
-{
-  protected Node(Node? parent = null)
-  {
-    Parent = parent;
-  }
-
-  public Node? Parent { get; set; }
-
-  public abstract int GetMagnitude();
-
-  public abstract NumberNode? GetPreviousNumber(Node? relativeToChild = null);
-
-  public abstract NumberNode? GetNextNumber(Node? relativeToChild = null);
-
-  public abstract NumberNode? GetFirstNumber();
-
-  public abstract NumberNode? GetLastNumber();
-
-  public static PairNode MakePair(Node left, Node right, Node? parent = null)
-  {
-    var result = new PairNode(left, right, parent);
-    left.Parent = result;
-    right.Parent = result;
-    return result;
-  }
-
-  public static Node Parse(string text)
+  public static SnailfishNode Parse(string text)
     => ParseInternal(text, out var tail);
 
-  private static Node ParseInternal(ReadOnlySpan<char> input, out ReadOnlySpan<char> tail)
+  private static SnailfishNode ParseInternal(ReadOnlySpan<char> input, out ReadOnlySpan<char> tail)
   {
     if (input.Length > 0)
     {
@@ -153,9 +171,7 @@ abstract class Node
         var left = ParseInternal(input.Slice(1), out input);
         var right = ParseInternal(input.Slice(1), out input);
         tail = input.Slice(1);  // skip trailing ']'
-
-        if (left != null && right != null)
-          return MakePair(left, right);
+        return new PairNode(left, right);
       }
     }
 
@@ -163,60 +179,6 @@ abstract class Node
   }
 }
 
-class NumberNode : Node
-{
-  public NumberNode(int value, Node? parent = null) : base(parent)
-  {
-    Value = value;
-  }
+record NumberNode(int Value) : SnailfishNode { }
 
-  public int Value { get; set; }
-
-  public override int GetMagnitude() => Value;
-
-  public override string ToString() => Value.ToString();
-
-  public override NumberNode? GetPreviousNumber(Node? relativeToChild = null)
-    => Parent?.GetPreviousNumber(this) ?? this;
-
-  public override NumberNode? GetNextNumber(Node? relativeToChild = null)
-    => Parent?.GetNextNumber(this) ?? this;
-
-  public override NumberNode? GetFirstNumber() => this;
-
-  public override NumberNode? GetLastNumber() => this;
-}
-
-class PairNode : Node
-{
-  public PairNode(Node left, Node right, Node? parent = null) : base(parent)
-  {
-    Left = left;
-    Right = right;
-  }
-
-  public Node Left { get; set; }
-
-  public Node Right { get; set; }
-
-  public override int GetMagnitude()
-    => (3 * Left.GetMagnitude()) + (2 * Right.GetMagnitude());
-
-  public override string ToString() => $"[{Left},{Right}]";
-
-  public override NumberNode? GetPreviousNumber(Node? relativeToChild = null)
-    => relativeToChild == Right
-      ? Left?.GetLastNumber() ?? Parent?.GetPreviousNumber(this)
-      : Parent?.GetPreviousNumber(this);
-
-  public override NumberNode? GetNextNumber(Node? relativeToChild = null)
-    => relativeToChild == Left
-      ? Right?.GetFirstNumber() ?? Parent?.GetNextNumber(this)
-      : Parent?.GetNextNumber(this);
-
-  public override NumberNode? GetFirstNumber()
-    => Left?.GetFirstNumber();
-
-  public override NumberNode? GetLastNumber()
-    => Right?.GetLastNumber();
-}
+record PairNode(SnailfishNode Left, SnailfishNode Right) : SnailfishNode { }
