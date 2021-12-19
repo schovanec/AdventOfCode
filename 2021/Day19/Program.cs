@@ -2,35 +2,47 @@
 
 var input = Parse(File.ReadLines(args.FirstOrDefault() ?? "input.txt"));
 
-var found = new Dictionary<int, Scanner>()
-{
-  [0] = input[0].First()
-};
+var matched = AlignAllScanners(input);
 
-var queue = new Queue<int>();
-queue.Enqueue(0);
-while (queue.Count > 0)
-{
-  var id = queue.Dequeue();
-  var matches = AlignScanners(found[id], input.Where(g => !found.ContainsKey(g.Key)));
-  foreach (var m in matches)
-  {
-    found[m.Id] = m;
-    queue.Enqueue(m.Id);
-  }
-}
-
-var uniquePoints = found.Select(s => s.Value.AbsoluteBeacons.ToImmutableHashSet())
-                        .Aggregate((a, b) => a.Union(b));
+var uniquePoints = matched.Select(s => s.AbsoluteBeacons)
+                          .Aggregate((a, b) => a.Union(b))
+                          .ToList();
 Console.WriteLine($"Part 1 Result = {uniquePoints.Count}");
 
-var locations = found.Values.Select(x => x.Position).ToList();
+var locations = matched.Select(x => x.Position).ToList();
 var maxDistance = (from i in Enumerable.Range(0, locations.Count - 1)
                    from j in Enumerable.Range(i + 1, locations.Count - i - 1)
                    select locations[i].ManhattanDistance(locations[j])).Max();
 Console.WriteLine($"Part 2 Result = {maxDistance}");
 
-IEnumerable<Scanner> AlignScanners(Scanner target, IEnumerable<IGrouping<int, Scanner>> scanners)
+IList<Scanner> AlignAllScanners(IEnumerable<Scanner> scanners)
+{
+  var unmatched = scanners.GroupBy(x => x.Id)
+                          .ToDictionary(g => g.Key, g => g.ToImmutableList());
+  var matched = new Dictionary<int, Scanner>();
+
+  matched.Add(0, unmatched[0].First());
+  unmatched.Remove(0);
+
+  var queue = new Queue<int>();
+  queue.Enqueue(0);
+
+  while (queue.Count > 0 && unmatched.Count > 0)
+  {
+    var id = queue.Dequeue();
+    var matches = AlignAnyScanners(matched[id], unmatched.Values);
+    foreach (var m in matches)
+    {
+      matched[m.Id] = m;
+      queue.Enqueue(m.Id);
+      unmatched.Remove(m.Id);
+    }
+  }
+
+  return matched.Values.ToList();
+}
+
+IEnumerable<Scanner> AlignAnyScanners(Scanner target, IEnumerable<IEnumerable<Scanner>> scanners)
   => scanners.SelectMany(g => AlignAnyOrientation(target, g));
 
 IEnumerable<Scanner> AlignAnyOrientation(Scanner target, IEnumerable<Scanner> scanners)
@@ -39,13 +51,13 @@ IEnumerable<Scanner> AlignAnyOrientation(Scanner target, IEnumerable<Scanner> sc
 
 IEnumerable<Scanner> AlignSingleOrientation(Scanner target, Scanner scanner)
   => (from t in target.AbsoluteBeacons
-      from s in scanner.Beacons
+      from s in scanner.RelativeBeacons
       let offset = t.Subtract(s)
       let moved = scanner with { Position = offset }
       where target.AbsoluteBeacons.Intersect(moved.AbsoluteBeacons).Count() >= 12
       select moved).Take(1);
 
-ILookup<int, Scanner> Parse(IEnumerable<string> input)
+ImmutableList<Scanner> Parse(IEnumerable<string> input)
 {
   var scanners = ImmutableList.CreateBuilder<Scanner>();
 
@@ -75,7 +87,7 @@ ILookup<int, Scanner> Parse(IEnumerable<string> input)
   if (beacons.Count > 0)
     scanners.AddRange(Scanner.CreateOrientations(id, beacons));
 
-  return scanners.ToLookup(x => x.Id);
+  return scanners.ToImmutable();
 }
 
 record struct Vector(int X, int Y, int Z)
@@ -115,10 +127,10 @@ record struct Vector(int X, int Y, int Z)
     => EnumFacingDirections().SelectMany(v => v.EnumRotations());
 };
 
-record Scanner(int Id, ImmutableHashSet<Vector> Beacons, Vector Position = default)
+record Scanner(int Id, ImmutableHashSet<Vector> RelativeBeacons, Vector Position = default)
 {
   public IEnumerable<Vector> AbsoluteBeacons
-    => Beacons.Select(v => v.Add(Position));
+    => RelativeBeacons.Select(v => v.Add(Position));
 
   public static IEnumerable<Scanner> CreateOrientations(int id, IEnumerable<Vector> beacons)
   {
