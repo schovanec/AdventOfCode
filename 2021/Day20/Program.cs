@@ -21,16 +21,15 @@ Image EnhanceOnce(Image image, ImmutableArray<bool> algo)
 {
   var bounds = image.Bounds.Grow();
 
-  var result = ImmutableHashSet.CreateBuilder<Point>();
-  foreach (var pt in bounds.Points)
-  {
-    var n = image.GetEnhanceInput(pt);
-    if (algo[n])
-      result.Add(pt);
-  }
+  var result = bounds.Points
+                     .Where(pt => algo[image.GetEnhanceInput(pt)])
+                     .ToImmutableHashSet();
 
-  var infinite = image.InfiniteValue ? algo.Last() : algo.First();
-  return new Image(bounds, result.ToImmutable(), infinite);
+  var infinite = image.InfiniteValue
+    ? algo.Last()
+    : algo.First();
+
+  return new Image(bounds, result, infinite);
 }
 
 (ImmutableArray<bool> algo, Image image) Parse(IEnumerable<string> input)
