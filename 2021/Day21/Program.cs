@@ -25,6 +25,9 @@ void Part1()
     player = (player + 1) % 2;
   }
 
+  var losingScore = Math.Min(game.Player1.Score, game.Player2.Score);
+  Console.WriteLine($"Part 1 Result = {rollCount * losingScore}");
+
   int Roll()
   {
     if (lastRoll >= 100)
@@ -33,9 +36,6 @@ void Part1()
     ++rollCount;
     return ++lastRoll;
   }
-
-  var losingScore = Math.Min(game.Player1.Score, game.Player2.Score);
-  Console.WriteLine($"Part 1 Result = {rollCount * losingScore}");
 }
 
 void Part2()
