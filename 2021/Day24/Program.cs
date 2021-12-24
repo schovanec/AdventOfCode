@@ -1,103 +1,61 @@
-﻿// See https://aka.ms/new-console-template for more information
-using System.Collections.Immutable;
-
-var input = File.ReadLines(args.FirstOrDefault() ?? "input.txt")
+﻿var input = File.ReadLines(args.FirstOrDefault() ?? "input.txt")
                 .Select(Instruction.Parse)
                 .ToList()
                 .AsReadOnly();
 
 var machine = new Machine(input, new MachineState());
 
-#if false
-//var result1 = Execute(machine, EnumDigits(11111111564138));
-var result2 = Execute(machine, EnumDigits(11111111564139));
-//var result3 = Execute(machine, EnumDigits(11111111564141));
-
-//Console.WriteLine(result1.State?.GetValueOrDefault("z"));
-Console.WriteLine("..");
-#else
 var digitValues = new long[] { 9, 8, 7, 6, 5, 4, 3, 2, 1 };
-var maxModel = FindMaximumModelNumber(machine, digitValues);
+var maxModel = FindModelNumber(machine, digitValues);
 Console.WriteLine($"Part 1 Result = {maxModel}");
 
 digitValues = digitValues.Reverse().ToArray();
-var minModel = FindMaximumModelNumber(machine, digitValues);
+var minModel = FindModelNumberParallel(machine, digitValues);
 Console.WriteLine($"Part 2 Result = {minModel}");
-#endif
-//foreach (var d in EnumDigits(12345678912345))
-//  Console.WriteLine(d);
 
-long? FindMaximumModelNumber(Machine machine,
+long FindModelNumberParallel(Machine machine,
                              IEnumerable<long> digitInputs,
                              int digits = 14,
-                             long value = 0,
-                             Dictionary<(MachineState state, long input), MachineState>? cache = default)
+                             long value = 0)
+{
+  return digitInputs.AsParallel()
+                    .Select(i => FindModelNumber(Execute(machine, EnumSingle(i)), digitInputs, 13, i))
+                    .Where(r => r.HasValue)
+                    .Min(r => r ?? 0);
+}
+
+long? FindModelNumber(Machine machine,
+                      IEnumerable<long> digitInputs,
+                      int digits = 14,
+                      long value = 0,
+                      Dictionary<(long z, long input), long?>? cache = default)
 {
   if (digits == 0)
-  {
-    //Console.WriteLine($"{value} => {machine.State?.GetValueOrDefault("z")}");
     return machine.State["z"] == 0 ? value : null;
-  }
 
   cache ??= new();
 
-#if false
-  var options = (from i in Enumerable.Range(1, 9)
-                 let m = Execute(machine, new long[] { i })
-                 let z = m.State!.GetValueOrDefault("z")
-                 orderby z
-                 select (machine: m, z: z, digit: i)).ToList();
+  var key = (machine.State.Z, digits);
+  if (cache.TryGetValue(key, out var cached))
+    return cached;
 
-  var max = default(long?);
-  foreach (var item in options)
-  {
-    var cur = (value * 10) + item.digit;
-    var result = FindMaximumModelNumber(item.machine, digits - 1, cur);
-    if (result.HasValue && result > max)
-      max = result.Value;
-  }
-
-  return max;
-#else
+  var result = default(long?);
   foreach (var i in digitInputs)
   {
-    var tail = ExecuteWithCache(machine, i, cache);
+    var tail = Execute(machine, EnumSingle(i));
     var current = (value * 10) + i;
-    //Console.WriteLine($"Current = {current}, w={tail.State?["w"]}, x={tail.State?["x"]}, y={tail.State?["y"]}, z={tail.State?["z"]}");
-    var result = FindMaximumModelNumber(tail, digitInputs, digits - 1, current, cache);
+    result = FindModelNumber(tail, digitInputs, digits - 1, current, cache);
     if (result.HasValue)
-      return result;
-
-    //break;
+      break;
   }
-#endif
 
-  return null;
+  cache[key] = result;
+  return result;
 }
 
-#if false
-IEnumerable<long> EnumDigits(long value)
+IEnumerable<T> EnumSingle<T>(T value)
 {
-  var digit = 10000000000000;
-  while (digit > 0)
-  {
-    yield return value / digit;
-    value = value % digit;
-    digit /= 10;
-  }
-}
-#endif
-
-Machine ExecuteWithCache(Machine machine, long nextInput, Dictionary<(MachineState state, long input), MachineState> cache)
-{
-  var key = (machine.State, nextInput);
-  if (cache.TryGetValue(key, out var result))
-    return machine with { State = result };
-
-  var after = Execute(machine, new[] { nextInput });
-  cache[key] = after.State;
-
-  return after;
+  yield return value;
 }
 
 Machine Execute(Machine machine, IEnumerable<long> input)
@@ -198,8 +156,6 @@ record LiteralParameter(long Value) : Parameter { }
 
 abstract record Instruction(Operation Operation)
 {
-  //public abstract void Execute(Func<long> input, Func<Parameter, long> read, Action<VariableParameter, long> write);
-
   public static Instruction Parse(string text)
   {
     var split = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -223,21 +179,8 @@ abstract record Instruction(Operation Operation)
     };
 }
 
-record UnaryInstruction(Operation Operation, VariableParameter Param1) : Instruction(Operation)
-{
+record UnaryInstruction(Operation Operation, VariableParameter Param1) : Instruction(Operation) { }
 
-}
+record BinaryInstruction(Operation Operation, VariableParameter Param1, Parameter Param2) : Instruction(Operation) { }
 
-record BinaryInstruction(Operation Operation, VariableParameter Param1, Parameter Param2) : Instruction(Operation)
-{
-}
-
-enum Operation
-{
-  Input,
-  Add,
-  Multiply,
-  Divide,
-  Modulus,
-  Equals
-}
+enum Operation { Input, Add, Multiply, Divide, Modulus, Equals }
