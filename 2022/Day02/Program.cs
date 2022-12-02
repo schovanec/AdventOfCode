@@ -1,16 +1,29 @@
-﻿var plays = File.ReadLines(args.FirstOrDefault() ?? "input.txt")
-                .Select(x => (player: ParseMove(x[2]), opponent: ParseMove(x[0])));
+﻿var input = File.ReadLines(args.FirstOrDefault() ?? "input.txt")
+                .Select(x => (first: x[0], second: x[2]))
+                .ToList();
 
-var totalScore = plays.Sum(x => CalculateScore(x.player, x.opponent));
+var scoresPart1 = from item in input
+                  let opponent = ParseMove(item.first)
+                  let player = ParseMove(item.second)
+                  let outcome = GetOutcome(player, opponent)
+                  select CalculateScore(player, outcome);
 
-Console.WriteLine($"Part 1 Result = {totalScore}");
+Console.WriteLine($"Part 1 Result = {scoresPart1.Sum()}");
 
-static int CalculateScore(Move player, Move opponent)
-  => GetMoveScore(player) + GetOutcomeScore(GetOutcome(player, opponent));
+var scoresPart2 = from item in input
+                  let opponent = ParseMove(item.first)
+                  let outcome = ParseOutcome(item.second)
+                  let player = GetMoveForDesiredOutcome(opponent, outcome)
+                  select CalculateScore(player, outcome);
 
-static int GetMoveScore(Move move) => (int)move;
+Console.WriteLine($"Part 2 Result = {scoresPart2.Sum()}");
 
-static int GetOutcomeScore(Outcome outcome) => (int)outcome;
+static int CalculateScore(Move playerMove, Outcome outcome)
+  => GetMoveScore(playerMove) + GetOutcomeScore(outcome);
+
+static int GetMoveScore(Move move) => (int)move + 1;
+
+static int GetOutcomeScore(Outcome outcome) => (int)outcome * 3;
 
 static Outcome GetOutcome(Move player, Move opponent)
   => (player, opponent) switch
@@ -22,6 +35,14 @@ static Outcome GetOutcome(Move player, Move opponent)
     _ => Outcome.Lose
   };
 
+static Move GetMoveForDesiredOutcome(Move opponent, Outcome desiredOutcome)
+  => desiredOutcome switch
+  {
+    Outcome.Win => (Move)(((int)opponent + 1) % 3),
+    Outcome.Lose => (Move)(((int)opponent + 2) % 3),
+    _ => opponent,
+  };
+
 static Move ParseMove(char input)
   => input switch
   {
@@ -31,6 +52,15 @@ static Move ParseMove(char input)
     _ => throw new ArgumentException("Invalid move", nameof(input))
   };
 
-enum Move { Rock = 1, Paper = 2, Scissors = 3 }
+static Outcome ParseOutcome(char input)
+  => input switch
+  {
+    'X' => Outcome.Lose,
+    'Y' => Outcome.Draw,
+    'Z' => Outcome.Win,
+    _ => throw new ArgumentException("Invalid outcome", nameof(input))
+  };
 
-enum Outcome { Lose = 0, Draw = 3, Win = 6 }
+enum Move { Rock, Paper, Scissors }
+
+enum Outcome { Lose, Draw, Win }
