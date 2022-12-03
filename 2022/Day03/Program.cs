@@ -9,7 +9,7 @@ Console.WriteLine($"Part 1 Result = {priorityTotal}");
 
 var badgePriorityTotal = bags.Select(x => x.AllItems)
                              .Chunk(3)
-                             .Select(x => x.Aggregate((a, b) => a.Intersect(b)).First())
+                             .Select(x => x.Aggregate(Enumerable.Intersect).First())
                              .Sum(GetItemPriority);
 
 Console.WriteLine($"Part 2 Result = {badgePriorityTotal}");
