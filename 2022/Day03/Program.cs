@@ -1,8 +1,6 @@
-﻿using System.Collections.Immutable;
-
-var bags = File.ReadAllLines(args.FirstOrDefault() ?? "input.txt")
-               .Select(Bag.Create)
-               .ToImmutableList();
+﻿var bags = File.ReadAllLines(args.FirstOrDefault() ?? "input.txt")
+               .Select(line => new Bag(line))
+               .ToList();
 
 var priorityTotal = bags.Select(x => x.ItemsInBoth.First())
                         .Sum(GetItemPriority);
@@ -24,17 +22,13 @@ static int GetItemPriority(char item)
     _ => 0
   };
 
-record Bag(ImmutableHashSet<char> First, ImmutableHashSet<char> Second)
+record Bag(IEnumerable<char> AllItems)
 {
-  public ImmutableHashSet<char> AllItems => First.Union(Second);
+  public int Size = AllItems.Count() / 2;
+
+  IEnumerable<char> First => AllItems.Take(Size);
+
+  IEnumerable<char> Second => AllItems.Skip(Size);
 
   public IEnumerable<char> ItemsInBoth => First.Intersect(Second);
-
-  public static Bag Create(string contents)
-  {
-    var size = contents.Length / 2;
-    return new Bag(
-      contents.Take(size).ToImmutableHashSet(),
-      contents.Skip(size).ToImmutableHashSet());
-  }
 }
