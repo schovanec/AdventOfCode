@@ -9,11 +9,10 @@ var priorityTotal = bags.Select(x => x.ItemsInBoth.First())
 
 Console.WriteLine($"Part 1 Result = {priorityTotal}");
 
-var groups = bags.Select((bag, i) => (group: i / 3, bag))
-                 .GroupBy(x => x.group, x => x.bag.AllItems);
-
-var badgePriorityTotal = groups.Select(x => x.Aggregate((a, b) => a.Intersect(b)).First())
-                               .Sum(GetItemPriority);
+var badgePriorityTotal = bags.Select(x => x.AllItems)
+                             .Chunk(3)
+                             .Select(x => x.Aggregate((a, b) => a.Intersect(b)).First())
+                             .Sum(GetItemPriority);
 
 Console.WriteLine($"Part 2 Result = {badgePriorityTotal}");
 
