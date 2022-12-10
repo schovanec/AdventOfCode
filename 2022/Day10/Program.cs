@@ -55,7 +55,7 @@ static IEnumerable<int> Execute(IEnumerable<(string op, int? operand)> instructi
   }
 }
 
-static (string op, int? operaand) ParseInstruction(string instruction)
+static (string op, int? operand) ParseInstruction(string instruction)
 {
   var parts = instruction.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
   return (parts[0], parts.Length > 1 ? int.Parse(parts[1]) : default);
