@@ -1,22 +1,32 @@
-﻿var input = File.ReadLines(args.FirstOrDefault() ?? "input.txt")
+﻿using System.Collections.Immutable;
+
+var input = File.ReadLines(args.FirstOrDefault() ?? "input.txt")
                 .Select(line => line.Split(' ', 2))
                 .Select(x => (direction: x[0][0], count: int.Parse(x[1])))
                 .ToList();
 
-var moves = from cmd in input
-            from d in Enumerable.Repeat(cmd.direction, cmd.count)
-            select d;
+var result1 = CountTailPositions(input);
+Console.WriteLine($"Part 1 Result = {result1}");
 
-Rope current = new();
-HashSet<Point> tailPositions = new();
-tailPositions.Add(current.Tail);
-foreach (var direction in moves)
+var result2 = CountTailPositions(input, 10);
+Console.WriteLine($"Part 2 Result = {result2}");
+
+static int CountTailPositions(IEnumerable<(char direction, int count)> input, int knots = 2)
 {
-  current = current.Move(direction);
-  tailPositions.Add(current.Tail);
-}
+  var moves = from cmd in input
+              from d in Enumerable.Repeat(cmd.direction, cmd.count)
+              select d;
 
-Console.WriteLine($"Part 1 Result = {tailPositions.Count}");
+  var current = Rope.Create(knots);
+  HashSet<Point> tailPositions = new() { current.Tail };
+  foreach (var direction in moves)
+  {
+    current = current.Move(direction);
+    tailPositions.Add(current.Tail);
+  }
+
+  return tailPositions.Count;
+}
 
 record struct Point(int X = 0, int Y = 0)
 {
@@ -30,48 +40,39 @@ record struct Point(int X = 0, int Y = 0)
       _ => this
     };
 
-  public override string ToString() => $"({X}, {Y})";
+  public Point Follow(Point head)
+  {
+    var xdist = X - head.X;
+    var xabs = Math.Abs(xdist);
+
+    var ydist = Y - head.Y;
+    var yabs = Math.Abs(ydist);
+
+    if (xabs <= 1 && yabs <= 1)
+      return this;
+    else if (xdist == 0 && Math.Abs(ydist) > 1)
+      return this with { Y = Y - Math.Sign(ydist) };
+    else if (ydist == 0 && Math.Abs(xdist) > 1)
+      return this with { X = X - Math.Sign(xdist) };
+    else
+      return new(X - Math.Sign(xdist), Y - Math.Sign(ydist));
+  }
 }
 
-record struct Rope(Point Head = default, Point Tail = default)
+record struct Rope(ImmutableArray<Point> Knots)
 {
-  public bool IsTailAdjacent
-    => Math.Abs(Head.X - Tail.X) <= 1 && Math.Abs(Head.Y - Tail.Y) <= 1;
+  public Point Tail => Knots.Last();
 
   public Rope Move(char direction)
-    => (this with { Head = Head.Move(direction) }).FixTail();
-
-  public Rope FixTail()
   {
-    var (head, tail) = this;
+    var result = Knots.ToBuilder();
+    result[0] = result[0].Move(direction);
+    for (var i = 1; i < result.Count; ++i)
+      result[i] = result[i].Follow(result[i - 1]);
 
-    while (true)
-    {
-      var xdist = tail.X - head.X;
-      var xabs = Math.Abs(xdist);
-
-      var ydist = tail.Y - head.Y;
-      var yabs = Math.Abs(ydist);
-
-      if (xabs <= 1 && yabs <= 1)
-        break;
-
-      if (xdist == 0 && Math.Abs(ydist) > 1)
-      {
-        tail = tail with { Y = tail.Y - Math.Sign(ydist) };
-      }
-      else if (ydist == 0 && Math.Abs(xdist) > 1)
-      {
-        tail = tail with { X = tail.X - Math.Sign(xdist) };
-      }
-      else
-      {
-        tail = new(tail.X - Math.Sign(xdist), tail.Y - Math.Sign(ydist));
-      }
-    }
-
-    return new(head, tail);
+    return new(result.ToImmutable());
   }
 
-  public override string ToString() => $"[{Head}, {Tail}]";
+  public static Rope Create(int length)
+    => new(Enumerable.Repeat(new Point(), length).ToImmutableArray());
 }
