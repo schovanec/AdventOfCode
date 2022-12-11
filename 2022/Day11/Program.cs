@@ -5,7 +5,7 @@ var input = ParseInput(File.ReadAllLines(args.FirstOrDefault() ?? "input.txt")).
 var result1 = CalculateMonkeyBusiness(input, 20, w => w / 3);
 Console.WriteLine($"Part 1 Result = {result1}");
 
-var wrap = input.Select(m => m.Test.Divisor).Aggregate((a, b) => a * b);
+var wrap = input.Select(m => m.Divisor).Aggregate((a, b) => a * b);
 var result2 = CalculateMonkeyBusiness(input, 10000, w => w % wrap);
 Console.WriteLine($"Part 2 Result = {result2}");
 
@@ -60,12 +60,14 @@ static Monkey ParseOneMonkey(ArraySegment<string> input, out ArraySegment<string
   var id = int.Parse(input[0].Split(' ', 2)[1].TrimEnd(':'));
   var items = input[1].Split(':', 2)[1].Split(',', StringSplitOptions.TrimEntries).Select(long.Parse);
   var operation = ParseOperation(input[2].Split(':', StringSplitOptions.TrimEntries)[1]);
-  var test = ParseTest(input[3..], out tail);
+  var (divisor, monkeyIfTrue, monkeyIfFalse) = ParseTest(input[3..], out tail);
   return new Monkey(
     id,
     items.ToImmutableList(),
     operation,
-    test);
+    divisor,
+    monkeyIfTrue,
+    monkeyIfFalse);
 }
 
 static Func<long, long> ParseOperation(string input)
@@ -73,35 +75,33 @@ static Func<long, long> ParseOperation(string input)
   var expression = input.Split('=', 2, StringSplitOptions.TrimEntries)[1];
   var parts = expression.Split(' ', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
-  Func<long, long> GetOperand(string value) => value switch
+  return (parts[0], parts[1], parts[2]) switch
   {
-    "old" => (old => old),
-    _ when long.TryParse(value, out var num) => (_ => num),
-    _ => (_ => 0)
-  };
-
-  var left = GetOperand(parts[0]);
-  var op = parts[1];
-  var right = GetOperand(parts[2]);
-  return op switch
-  {
-    "*" => (old => left(old) * right(old)),
-    "+" => (old => left(old) + right(old)),
-    _ => (_ => 0)
+    ("old", "*", "old") => (old => old * old),
+    ("old", "*", var x) when int.TryParse(x, out var num) => (old => old * num),
+    ("old", "+", var x) when int.TryParse(x, out var num) => (old => old + num),
+    _ => throw new FormatException()
   };
 }
 
-static Test ParseTest(ArraySegment<string> input, out ArraySegment<string> tail)
+static (int divisor, int monkeyIfTrue, int monkeyIfFalse) ParseTest(ArraySegment<string> input, out ArraySegment<string> tail)
 {
   var divisor = int.Parse(input[0].Split(' ').Last());
   var monkeyIfTrue = int.Parse(input[1].Split(' ').Last());
   var monkeyIfFalse = int.Parse(input[2].Split(' ').Last());
 
   tail = input[3..];
-  return new Test(divisor, monkeyIfTrue, monkeyIfFalse);
+  return (divisor, monkeyIfTrue, monkeyIfFalse);
 }
 
-record Monkey(int Id, ImmutableList<long> Items, Func<long, long> Operation, Test Test, long Inspections = 0L)
+record Monkey(
+  int Id,
+  ImmutableList<long> Items,
+  Func<long, long> Operation,
+  int Divisor,
+  int MonkeyIfDivisble,
+  int MonkeyIfNotDivisible,
+  long Inspections = 0L)
 {
   public Monkey AfterInspections()
     => this with { Inspections = Inspections + Items.Count, Items = ImmutableList<long>.Empty };
@@ -110,16 +110,10 @@ record Monkey(int Id, ImmutableList<long> Items, Func<long, long> Operation, Tes
     => from w in Items
        let wp = Operation(w)
        let reduced = reduce(wp)
-       select (reduced, Test.GetNextMoney(reduced));
+       select (reduced, NextMonkey(reduced));
 
   public Monkey Catch(IEnumerable<long> moreItems)
     => this with { Items = Items.AddRange(moreItems) };
 
-  public override string ToString()
-    => $"Monkey {Id}: [{string.Join(", ", Items)}] {{Inspections: {Inspections}}}";
-}
-
-record struct Test(int Divisor, int TrueMonkeyId, int FalseMonkeyId)
-{
-  public int GetNextMoney(long worry) => worry % Divisor == 0 ? TrueMonkeyId : FalseMonkeyId;
+  private int NextMonkey(long worryValue) => worryValue % Divisor == 0 ? MonkeyIfDivisble : MonkeyIfNotDivisible;
 }
