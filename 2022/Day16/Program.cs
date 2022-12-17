@@ -4,7 +4,6 @@ var input = File.ReadLines(args.FirstOrDefault() ?? "input.txt")
                 .Select((line, i) => Valve.Parse(line) with { Index = i })
                 .ToDictionary(x => x.Name);
 
-#if true
 var result1 = FindBest(
   "AA",
   x => GetNextStepsSingle(input, x),
@@ -93,57 +92,6 @@ int FindBest<T>(T start, Func<Step<T>, IEnumerable<Step<T>>> next, int initialTi
   }
 }
 
-#else
-var (result1, _) = FindBest(input, "AA", 30);
-Console.WriteLine($"Part 1 Result = {result1}");
-
-var (result2a, openedValves) = FindBest(input, "AA", 26);
-var (result2b, _) = FindBest(input, "AA", 26, openedValves);
-Console.WriteLine($"Part 2 Result = {result2a + result2b}");
-
-Result FindBest(
-  Dictionary<string, Valve> valves, string start, int initialTime,
-  ImmutableSortedSet<string>? openValves = default)
-{
-  var cache = new Dictionary<(string, string, int, int), Result>();
-  return Visit(
-    start,
-    openValves ?? ImmutableSortedSet<string>.Empty,
-    0,
-    initialTime);
-
-  Result Visit(string pos, ImmutableSortedSet<string> state, int currentRate, int timeLeft)
-  {
-    var cacheKey = (pos, string.Concat(state), currentRate, timeLeft);
-    if (cache.TryGetValue(cacheKey, out var cached))
-      return cached;
-
-    if (timeLeft == 0)
-      return new(0, state);
-
-    var next = EnumSteps(pos, state, currentRate, timeLeft);
-    var answer = next.OrderByDescending(n => n.Pressure)
-                     .ThenBy(n => n.Valves.Count)
-                     .First();
-
-    return cache[cacheKey] = answer with { Pressure = answer.Pressure + currentRate };
-  }
-
-  IEnumerable<Result> EnumSteps(string pos, ImmutableSortedSet<string> state, int currentRate, int timeLeft)
-  {
-    if (!state.Contains(pos))
-    {
-      var n = valves[pos].Rate;
-      if (n > 0)
-        yield return Visit(pos, state.Add(pos), currentRate + n, timeLeft - 1);
-    }
-
-    foreach (var next in valves[pos].Tunnels)
-      yield return Visit(next, state, currentRate, timeLeft - 1);
-  }
-}
-#endif
-
 record Valve(string Name, int Rate, ImmutableArray<string> Tunnels, int Index = 0)
 {
   public static Valve Parse(string line)
@@ -164,8 +112,6 @@ record struct Step<T>(T Position, ValveState State, int CurrentRate)
 {
   public (T, ValveState, int, int) CacheKey(int time) => (Position, State, CurrentRate, time);
 }
-
-record struct Result(int Pressure, ImmutableSortedSet<string> Valves);
 
 record struct ValveState(ulong Value = 0)
 {
