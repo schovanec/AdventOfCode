@@ -1,99 +1,118 @@
 ﻿using System.Collections.Immutable;
 
 var input = File.ReadLines(args.FirstOrDefault() ?? "input.txt")
-                .Select((line, i) => Valve.Parse(line) with { Index = i })
-                .ToDictionary(x => x.Name);
+                .Select(Valve.Parse)
+                .ToList();
 
-var result1 = FindBest(
+var graph = SimplifyGraph(input, "AA").ToDictionary(x => x.Name);
+var openValves = graph.Keys.Where(v => v != "AA").ToImmutableSortedSet();
+
+var clock = System.Diagnostics.Stopwatch.StartNew();
+var result1 = Search(
   "AA",
-  x => GetNextStepsSingle(input, x),
+  openValves,
+  (n, m) => graph[n].Distance[m],
+  n => graph[n].Rate,
   30);
+clock.Stop();
 Console.WriteLine($"Part 1 Result = {result1}");
+Console.WriteLine($"Part 1 Time = {clock.Elapsed.TotalMilliseconds:#,##0.000}ms");
 
-var result2 = FindBest(
-  ("AA", "AA"),
-  x => GetNextStepsDouble(input, x),
-  26);
+clock.Restart();
+var result2 = Search(
+  "AA",
+  openValves,
+  (n, m) => graph[n].Distance[m],
+  n => graph[n].Rate,
+  26,
+  2);
+clock.Stop();
 Console.WriteLine($"Part 2 Result = {result2}");
+Console.WriteLine($"Part 2 Time = {clock.Elapsed.TotalMilliseconds:#,##0.000}ms");
 
-static IEnumerable<Step<string>> GetNextStepsSingle(Dictionary<string, Valve> valves, Step<string> current)
+static int Search(string start, ImmutableSortedSet<string> valves, Func<string, string, int> distance, Func<string, int> rate, int time, int actors = 1)
 {
-  var (pos, state, currentRate) = current;
-  var index = valves[pos].Index;
-  if (!state.Contains(index))
+  Dictionary<(string, string, int, int), int> cache = new();
+
+  return SearchInner(start, valves, time, actors - 1);
+
+  int SearchInner(string node, ImmutableSortedSet<string> open, int remaining, int actorsLeft)
   {
-    var n = valves[pos].Rate;
-    if (n > 0)
-      yield return new(pos, state.Add(index), currentRate + n);
-  }
-
-  foreach (var next in valves[pos].Tunnels)
-    yield return new(next, state, currentRate);
-}
-
-static IEnumerable<Step<(string a, string b)>> GetNextStepsDouble(Dictionary<string, Valve> valves, Step<(string a, string b)> current)
-{
-  var ((posA, posB), state, currentRate) = current;
-
-  var (valveA, valveB) = (valves[posA], valves[posB]);
-  var (rateA, rateB) = (valveA.Rate, valveB.Rate);
-  var (indexA, indexB) = (valveA.Index, valveB.Index);
-  var canOpenA = rateA > 0 && !state.Contains(indexA);
-  var canOpenB = rateB > 0 && !state.Contains(indexB);
-
-  // both open
-  if (posA != posB && canOpenA && canOpenB)
-    yield return new((posA, posB), state.Add(indexA).Add(indexB), currentRate + rateA + rateB);
-
-  // A opens
-  if (canOpenA)
-  {
-    var newState = state.Add(indexA);
-    var newRate = currentRate + rateA;
-    foreach (var next in valves[posB].Tunnels)
-      yield return new((posA, next), newState, newRate);
-  }
-
-  // B opens
-  if (canOpenB)
-  {
-    var newState = state.Add(indexB);
-    var newRate = currentRate + rateB;
-    foreach (var next in valves[posA].Tunnels)
-      yield return new((next, posB), newState, newRate);
-  }
-
-  // both move
-  var moves = from nextA in valves[posA].Tunnels
-              from nextB in valves[posB].Tunnels
-              select (nextA, nextB);
-  foreach (var (nextA, nextB) in moves)
-    yield return new((nextA, nextB), state, currentRate);
-}
-
-int FindBest<T>(T start, Func<Step<T>, IEnumerable<Step<T>>> next, int initialTime)
-{
-  var cache = new Dictionary<(T, ValveState, int, int), int>();
-  return Visit(
-    new(start, new(), 0),
-    initialTime);
-
-  int Visit(Step<T> current, int timeLeft)
-  {
-    if (timeLeft == 0)
+    if (open.Count == 0)
       return 0;
 
-    var cacheKey = current.CacheKey(timeLeft);
+    var cacheKey = (node, string.Concat(open), remaining, actorsLeft);
     if (cache.TryGetValue(cacheKey, out var cached))
       return cached;
 
-    var answer = next(current).Max(n => Visit(n, timeLeft - 1));
-    return cache[cacheKey] = answer + current.CurrentRate;
+    var best = 0;
+    foreach (var next in open)
+    {
+      var cost = distance(node, next) + 1;
+      var after = remaining - cost;
+      if (after > 0)
+      {
+        var total = after * rate(next);
+        total += SearchInner(next, open.Remove(next), after, actorsLeft);
+        if (total > best)
+          best = total;
+      }
+    }
+
+    if (actorsLeft > 0)
+    {
+      var total = SearchInner(start, open, time, actorsLeft - 1);
+      if (total > best)
+        best = total;
+    }
+
+    return cache[cacheKey] = best;
   }
 }
 
-record Valve(string Name, int Rate, ImmutableArray<string> Tunnels, int Index = 0)
+static IEnumerable<Valve> SimplifyGraph(IList<Valve> valves, params string[] keep)
 {
+  var lookup = valves.SelectMany(x => x.Tunnels, (v, t) => (v.Name, t)).ToLookup(x => x.Name, x => x.t);
+  var important = valves.Where(v => keep.Contains(v.Name) || v.Rate > 0).ToDictionary(x => x.Name);
+  foreach (var item in important.Values)
+  {
+    yield return item with
+    {
+      Distance = FindShortestPathsFromNode(item.Name, n => lookup[n])
+        .Where(x => important.ContainsKey(x.node))
+        .ToImmutableDictionary(x => x.node, x => x.cost)
+    };
+  }
+}
+
+static IEnumerable<(string node, int cost)> FindShortestPathsFromNode(string start, Func<string, IEnumerable<string>> edges)
+{
+  Dictionary<string, int> distance = new() { [start] = 0 };
+
+  PriorityQueue<string, int> queue = new();
+  queue.Enqueue(start, 0);
+
+  while (queue.Count > 0)
+  {
+    var current = queue.Dequeue();
+    foreach (var next in edges(current))
+    {
+      var d = distance[current] + 1;
+      if (d < distance.GetValueOrDefault(next, int.MaxValue))
+      {
+        distance[next] = d;
+        queue.Enqueue(next, d);
+      }
+    }
+  }
+
+  return distance.Where(x => x.Key != start).Select(x => (x.Key, x.Value));
+}
+
+record Valve(string Name, int Rate, ImmutableArray<string> Tunnels)
+{
+  public ImmutableDictionary<string, int> Distance { get; init; } = ImmutableDictionary<string, int>.Empty;
+
   public static Valve Parse(string line)
   {
     var parts = line.Split(' ');
@@ -106,16 +125,4 @@ record Valve(string Name, int Rate, ImmutableArray<string> Tunnels, int Index = 
 
     return new(name, rate, tunnels);
   }
-}
-
-record struct Step<T>(T Position, ValveState State, int CurrentRate)
-{
-  public (T, ValveState, int, int) CacheKey(int time) => (Position, State, CurrentRate, time);
-}
-
-record struct ValveState(ulong Value = 0)
-{
-  public bool Contains(int i) => (Value & (1UL << i)) != 0;
-
-  public ValveState Add(int i) => new(Value | (1UL << i));
 }
