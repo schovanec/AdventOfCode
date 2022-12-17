@@ -28,8 +28,8 @@ static long DoPart2(IList<Sensor> sensors, int size)
 
   for (var y = 0; y <= size; ++y)
   {
-    var covered = sensors.Select(s => s.GetSlice(y).Intersect(limit));
-    var gap = FindGap(covered);
+    var covered = sensors.Select(s => s.GetSlice(y));
+    var gap = FindGap(covered, limit);
     if (gap is int x)
       return (x * 4000000L) + y;
   }
@@ -37,24 +37,25 @@ static long DoPart2(IList<Sensor> sensors, int size)
   return 0;
 }
 
-static int? FindGap(IEnumerable<Range> ranges)
+static int? FindGap(IEnumerable<Range> ranges, Range limit)
 {
-  var ordered = ranges.Where(r => !r.IsEmpty)
+  var ordered = ranges.Select(r => r.Intersect(limit))
+                      .Where(r => !r.IsEmpty)
                       .OrderBy(r => r.Min)
                       .ThenBy(r => r.Max);
 
-  int? max = null;
+  int max = limit.Min - 1;
   foreach (var r in ordered)
   {
-    if (!max.HasValue)
-      max = r.Max;
-    else if (max.Value + 1 < r.Min)
+    if (max + 1 < r.Min)
       return max + 1;
-    else
-      max = Math.Max(max.Value, r.Max);
+
+    max = Math.Max(max, r.Max);
   }
 
-  return null;
+  return max < limit.Max
+    ? max + 1
+    : null;
 }
 
 record struct Range(int Min, int Max)
