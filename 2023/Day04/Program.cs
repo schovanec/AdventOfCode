@@ -1,56 +1,37 @@
-﻿using System.Collections.Immutable;
+﻿var counts = File.ReadAllLines(args.FirstOrDefault() ?? "input.txt")
+                 .Select(CountWinningNumbers)
+                 .ToArray();
 
-var cards = File.ReadAllLines(args.FirstOrDefault() ?? "input.txt")
-                .Select(Card.Parse)
-                .ToArray();
-
-var result1 = cards.Sum(x => x.Score);
+var result1 = counts.Where(x => x > 0).Sum(x => 1 << (x - 1));
 Console.WriteLine($"Part 1 Result = {result1}");
 
-var result2 = PlayGame(cards);
+var result2 = PlayGame(counts);
 Console.WriteLine($"Part 2 Result = {result2}");
 
-int PlayGame(IEnumerable<Card> cards)
+int PlayGame(IList<int> counts)
 {
-  var winCounts = cards.ToDictionary(c => c.Id, c => c.OurWinningNumbers.Count());
-  var queue = new Queue<int>(cards.Select(c => c.Id));
+  var queue = new Queue<int>(Enumerable.Range(0, counts.Count));
   var totalCards = 0;
   while (queue.Count > 0)
   {
-    var id = queue.Dequeue();
+    var cardIndex = queue.Dequeue();
     ++totalCards;
 
-    for (var i = 1; i <= winCounts[id]; ++i)
-      queue.Enqueue(id + i);
+    for (var i = 1; i <= counts[cardIndex]; ++i)
+      queue.Enqueue(cardIndex + i);
   }
 
   return totalCards;
 }
 
-record Card(int Id, ImmutableHashSet<int> Winning, ImmutableHashSet<int> Yours)
+int CountWinningNumbers(string card)
 {
-  public IEnumerable<int> OurWinningNumbers => Winning.Intersect(Yours);
-
-  public int Score
-    => OurWinningNumbers.Count() is int n and > 0
-      ? 1 << (n - 1)
-      : 0;
-
-  public static Card Parse(string input)
-  {
-    var parts = input.Split(':', 2, StringSplitOptions.TrimEntries);
-
-    var id = int.Parse(parts[0][4..]);
-
-    var lists = parts[1].Split('|', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                        .Select(ParseNumberList)
-                        .ToArray();
-
-    return new(id, lists[0], lists[1]);
-  }
-
-  private static ImmutableHashSet<int> ParseNumberList(string list)
-    => list.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-           .Select(int.Parse)
-           .ToImmutableHashSet();
+  var numbers = card.Split(':', 2)[1];
+  return numbers.Split('|', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                     .Select(ParseNumberList)
+                     .Aggregate((a, b) => a.Intersect(b))
+                     .Count();
 }
+
+IEnumerable<int> ParseNumberList(string list)
+  => list.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(int.Parse);
