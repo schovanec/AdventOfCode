@@ -13,20 +13,18 @@ Console.WriteLine($"Part 2 Result = {result2}");
 int PlayGame(IEnumerable<Card> cards)
 {
   var winCounts = cards.ToDictionary(c => c.Id, c => c.OurWinningNumbers.Count());
-  var cardCounts = cards.ToDictionary(c => c.Id, _ => 0);
-
   var queue = new Queue<int>(cards.Select(c => c.Id));
-
+  var totalCards = 0;
   while (queue.Count > 0)
   {
     var id = queue.Dequeue();
-    cardCounts[id]++;
+    ++totalCards;
 
     for (var i = 1; i <= winCounts[id]; ++i)
       queue.Enqueue(id + i);
   }
 
-  return cardCounts.Values.Sum();
+  return totalCards;
 }
 
 record Card(int Id, ImmutableHashSet<int> Winning, ImmutableHashSet<int> Yours)
