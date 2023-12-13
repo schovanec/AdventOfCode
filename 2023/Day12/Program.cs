@@ -1,69 +1,91 @@
-﻿using System.Collections.Immutable;
-using System.Runtime.CompilerServices;
+﻿const char StateOperational = '.';
+const char StateDamaged = '#';
+const char StateUnknown = '?';
 
 var records = File.ReadLines(args.FirstOrDefault() ?? "input.txt")
-                  .Select(SpringStates.Parse)
+                  .Select(ParseRecord)
                   .ToArray();
 
-var result1 = records.Sum(r => CountArrangements(r.States, r.Check.AsSpan()));
+var result1 = records.Sum(r => CountArrangements(r.states, r.check));
 Console.WriteLine($"Part 1 Result = {result1}");
 
-int CountArrangements(string state, ReadOnlySpan<int> check)
+var unfolded = records.Select(r => Unfold(r)).ToArray();
+var result2 = unfolded.Sum(r => CountArrangements(r.states, r.check));
+Console.WriteLine($"Part 2 Result = {result2}");
+
+long CountArrangements(char[] initialStates, int[] initialCheck)
 {
-  if (state.Length == 0)
-    return check.IsEmpty ? 1 : 0;
+  var cache = new Dictionary<(int, int), long>();
+  return Search(0, 0);
 
-  if (check.IsEmpty)
-    return state.Contains('#') ? 0 : 1;
-
-  if (IsOperational(state[0]))
-    return CountArrangements(state[1..], check);
-
-  var span = check[0];
-  if (state.Length < span)
-    return 0;
-
-  if (IsDamaged(state[0]))
+  long Search(int stateOffset, int checkOffset)
   {
-    if (state.Take(span).Any(IsOperational))
-      return 0;
+    var key = (stateOffset, checkOffset);
+    if (cache.TryGetValue((stateOffset, checkOffset), out var cached))
+      return cached;
 
-    var skip = Math.Min(span + 1, state.Length);
-    if (skip > span && !CanBeOperational(state[span]))
-      return 0;
+    var state = initialStates.AsSpan(stateOffset..);
+    var check = initialCheck.AsSpan(checkOffset..);
 
-    return CountArrangements(state[skip..], check[1..]);
-  }
-  else
-  {
-    var countIfWorking = CountArrangements(state[1..], check);
+    if (state.IsEmpty)
+      return cache[key] = check.IsEmpty ? 1 : 0;
 
-    if (state.Take(span).Any(IsOperational))
-      return countIfWorking;
+    if (check.IsEmpty)
+      return cache[key] = state.Contains(StateDamaged) ? 0 : 1;
 
-    var skip = Math.Min(span + 1, state.Length);
-    if (skip > span && !CanBeOperational(state[span]))
-      return countIfWorking;
+    var operationalCount = state.IndexOfAnyExcept(StateOperational);
+    if (operationalCount > 0)
+      return cache[key] = Search(stateOffset + operationalCount, checkOffset);
 
-    return CountArrangements(state[skip..], check[1..]) + countIfWorking;
+    var span = check[0];
+    if (state.Length < span)
+      return cache[key] = 0;
+
+    if (state[0] == StateDamaged)
+    {
+      if (state[..span].Contains(StateOperational))
+        return cache[key] = 0;
+
+      var skip = Math.Min(span + 1, state.Length);
+      if (skip > span && !CanBeOperational(state[span]))
+        return cache[key] = 0;
+
+      return cache[key] = Search(stateOffset + skip, checkOffset + 1);
+    }
+    else
+    {
+      var countIfWorking = Search(stateOffset + 1, checkOffset);
+
+      if (state[..span].Contains(StateOperational))
+        return cache[key] = countIfWorking;
+
+      var skip = Math.Min(span + 1, state.Length);
+      if (skip > span && !CanBeOperational(state[span]))
+        return cache[key] = countIfWorking;
+
+      return cache[key] = Search(stateOffset + skip, checkOffset + 1) + countIfWorking;
+    }
   }
 }
 
-bool IsOperational(char ch) => ch == '.';
+static bool CanBeOperational(char ch) => ch == StateOperational || ch == StateUnknown;
 
-bool IsDamaged(char ch) => ch == '#';
-
-bool CanBeDamaged(char ch) => ch == '#' || ch == '?';
-
-bool CanBeOperational(char ch) => ch == '.' || ch == '?';
-
-record SpringStates(string States, ImmutableArray<int> Check)
+static (char[] states, int[] check) Unfold((char[] states, int[] check) record, int count = 5)
 {
-  public static SpringStates Parse(string input)
-  {
-    var split = input.Split(' ', 2);
-    return new(
-      split[0],
-      split[1].Split(',').Select(int.Parse).ToImmutableArray());
-  }
+  var unfoldedStates = Enumerable.Repeat(record.states, count)
+                                 .Aggregate((a, b) => [.. a, StateUnknown, .. b]);
+
+  var unfoldedCheck = Enumerable.Repeat(record.check, count)
+                                .SelectMany(x => x)
+                                .ToArray();
+
+  return (unfoldedStates, unfoldedCheck);
+}
+
+static (char[] states, int[] check) ParseRecord(string input)
+{
+  var split = input.Split(' ', 2);
+  return (
+    split[0].ToArray(),
+    split[1].Split(',').Select(int.Parse).ToArray());
 }
