@@ -59,9 +59,7 @@ record Device(Point Position, char Type)
     => (Type, incoming) switch
     {
       ('|', Direction.Left or Direction.Right) => [Direction.Up, Direction.Down],
-      ('|', _) => [incoming],
       ('-', Direction.Down or Direction.Up) => [Direction.Left, Direction.Right],
-      ('-', _) => [incoming],
       ('\\', Direction.Up) => [Direction.Left],
       ('\\', Direction.Right) => [Direction.Down],
       ('\\', Direction.Down) => [Direction.Right],
@@ -70,7 +68,7 @@ record Device(Point Position, char Type)
       ('/', Direction.Right) => [Direction.Up],
       ('/', Direction.Down) => [Direction.Left],
       ('/', Direction.Left) => [Direction.Down],
-      _ => []
+      _ => [incoming]
     };
 }
 
