@@ -5,37 +5,25 @@
 var result1 = FindBestPath(map);
 Console.WriteLine($"Part 1 Result = {result1}");
 
-static int FindBestPath(Map map)
+var result2 = FindBestPath(map, 4, 10);
+Console.WriteLine($"Part 2 Result = {result2}");
+
+static int FindBestPath(Map map, int directionMin = 1, int directionMax = 3)
 {
-  Dictionary<Node, int> dist = new() { [new(0, 0, Direction.South, 0)] = 0 };
-  Dictionary<Node, Node> prev = new();
-  PriorityQueue<Node, int> queue = new([(new(0, 0, Direction.South, 0), 0)]);
+  Dictionary<Node, int> dist = new() { [new(0, 0, Direction.South, -1)] = 0 };
+  PriorityQueue<Node, int> queue = new([(new(0, 0, Direction.South, -1), 0)]);
 
   while (queue.TryDequeue(out var u, out var uCost))
   {
-    //if (uCost > dist[u])
-    //  continue;
-
     if (u.X == map.Width - 1 && u.Y == map.Height - 1)
-    {
-      // List<(int X, int Y)> path = [(u.X, u.Y)];
-      // var current = u;
-      // while (prev.TryGetValue(current, out var p))
-      // {
-      //   path.Insert(0, (p.X, p.Y));
-      //   current = p;
-      // }
-      // Console.WriteLine(string.Join(" => ", path));
       return dist[u];
-    }
 
-    foreach (var next in map.EnumMovesFrom(u))
+    foreach (var next in map.EnumMovesFrom(u, directionMin, directionMax))
     {
       var cost = dist[u] + next.cost;
       if (cost < dist.GetValueOrDefault(next.node, int.MaxValue))
       {
         dist[next.node] = cost;
-        prev[next.node] = u;
         queue.Enqueue(next.node, cost);
       }
     }
@@ -48,18 +36,18 @@ enum Direction { North, East, South, West }
 
 record struct Node(int X, int Y, Direction Entered, int Steps)
 {
-  public Node Move(Direction direction)
+  public Node Move(Direction direction, int steps = 1)
   {
     var (newX, newY) = direction switch
     {
-      Direction.North => (X, Y - 1),
-      Direction.East => (X + 1, Y),
-      Direction.South => (X, Y + 1),
-      Direction.West => (X - 1, Y),
+      Direction.North => (X, Y - steps),
+      Direction.East => (X + steps, Y),
+      Direction.South => (X, Y + steps),
+      Direction.West => (X - steps, Y),
       _ => (X, Y)
     };
 
-    var newSteps = (direction == Entered) ? Steps + 1 : 1;
+    var newSteps = (direction == Entered) ? Steps + steps : 1;
 
     return new(newX, newY, direction, newSteps);
   }
@@ -71,17 +59,20 @@ record Map(int[][] HeatLoss)
 
   public int Height = HeatLoss?.Length ?? 0;
 
-  public IEnumerable<(Node node, int cost)> EnumMovesFrom(Node current, int directionLimit = 3)
+  public IEnumerable<(Node node, int cost)> EnumMovesFrom(Node current, int directionMin, int directionMax)
     => from dir in EnumDirections()
-       where dir != GetReverse(current.Entered)
+       where (current.Steps < 0 || current.Steps >= directionMin || current.Entered == dir)
+          && dir != GetReverse(current.Entered)
        let n = current.Move(dir)
-       where n.X >= 0
-          && n.Y >= 0
-          && n.X < Width
-          && n.Y < Height
-          && n.Steps <= directionLimit
+       where IsInMap(n) && n.Steps <= directionMax
+       let minStepsInDir = Math.Max(0, directionMin - n.Steps)
+       where minStepsInDir <= 0 || IsInMap(n.Move(dir, Math.Max(0, directionMin - n.Steps)))
        let cost = HeatLoss[n.Y][n.X]
        select (n, cost);
+
+  private bool IsInMap(Node node)
+    => node.X >= 0 && node.X < Width
+    && node.Y >= 0 && node.Y < Height;
 
   private static IEnumerable<Direction> EnumDirections()
     => [Direction.North, Direction.East, Direction.South, Direction.West];
