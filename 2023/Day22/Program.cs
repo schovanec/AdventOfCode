@@ -1,18 +1,31 @@
 ﻿var bricks = File.ReadLines(args.FirstOrDefault() ?? "input.txt")
                  .Select(Brick.Parse)
-                 .ToArray();
+                 .ToList();
 
-var dropped = DropBricks(bricks);
-var result1 = CountRedundantSupports(dropped);
+var (dropped, _) = DropBricks(bricks);
+var supports = FindSupports(dropped);
+var critical = FindCriticalBricks(supports).ToList();
+var result1 = bricks.Count - critical.Count;
 Console.WriteLine($"Part 1 Result = {result1}");
 
-static List<Brick> DropBricks(ICollection<Brick> start)
+var result2 = critical.AsParallel()
+                      .Sum(block =>
+                      {
+                        var destroyed = dropped.Where(b => b != block).ToList();
+                        var (_, count) = DropBricks(destroyed);
+                        return count;
+                      });
+Console.WriteLine($"Part 2 Result = {result2}");
+
+static (List<Brick>, int dropped) DropBricks(ICollection<Brick> start, int floor = 1)
 {
-  var occupied = start.SelectMany(brick => brick.EnumPoints())
-                      .ToHashSet();
+  var bricks = start.Where(brick => brick.Start.Z >= floor);
+  var occupied = bricks.SelectMany(brick => brick.EnumPoints())
+                       .ToHashSet();
 
   List<Brick> result = new();
-  foreach (var brick in start.OrderBy(b => b.Start.Z))
+  var count = 0;
+  foreach (var brick in bricks.OrderBy(b => b.Start.Z))
   {
     var z = brick.Start.Z;
     var bottom = brick.EnumBottomRow().ToArray();
@@ -37,35 +50,34 @@ static List<Brick> DropBricks(ICollection<Brick> start)
       var newBrick = brick.Move(dz: dz);
       occupied.UnionWith(newBrick.EnumPoints());
       result.Add(newBrick);
+      ++count;
     }
   }
 
-  return result;
+  return (result, count);
 }
 
-static int CountRedundantSupports(ICollection<Brick> bricks)
+static ILookup<Brick, Brick> FindSupports(ICollection<Brick> bricks)
 {
   var allPoints = from b in bricks
                   from pt in b.EnumPoints()
                   select (point: pt, brick: b);
-  var lookup = allPoints.ToDictionary(x => x.point, x => x.brick);
-
-  foreach (var x in lookup.Keys.Where(pt => pt.Z < 1))
-    Console.WriteLine(x);
+  var lookup = allPoints.ToLookup(x => x.point, x => x.brick);
 
   var supports = from b in bricks
                  from pt in b.EnumBottomRow()
-                 let below = lookup.GetValueOrDefault(pt.Move(dz: -1))
-                 where below != null && below != b
-                 group below by b into g
-                 select (block: g.Key, supports: g.Distinct().ToArray());
+                 from below in lookup[pt.Move(dz: -1)]
+                 where below != b
+                 select (block: b, support: below);
 
-  var singles = supports.Where(g => g.supports.Length == 1)
-                        .SelectMany(g => g.supports)
-                        .Distinct();
-
-  return bricks.Count - singles.Count();
+  return supports.Distinct()
+                 .ToLookup(x => x.block, x => x.support);
 }
+
+static IEnumerable<Brick> FindCriticalBricks(ILookup<Brick, Brick> supports)
+  => supports.Where(g => g.Count() == 1)
+             .SelectMany(g => g)
+             .Distinct();
 
 record struct Point(int X, int Y, int Z)
 {
