@@ -1,29 +1,77 @@
-﻿var stones = File.ReadLines(args.FirstOrDefault() ?? "input.txt")
-                 .Select(HailStone.Parse)
-                 .ToArray();
+﻿using Microsoft.Z3;
 
-var testAreaMin = args.Skip(1).Select(double.Parse).FirstOrDefault(200000000000000);
-var testAreaMax = args.Skip(2).Select(double.Parse).FirstOrDefault(400000000000000);
+var input = File.ReadLines(args.FirstOrDefault() ?? "input.txt")
+                .Select(HailStone.Parse)
+                .ToArray();
 
-var intersections = FindIntersectionPoints(stones.Select(x => x.ProjectOntoZ()).ToList());
-var result1 = intersections.Count(p => p.X >= testAreaMin && p.X <= testAreaMax
-                                    && p.Y >= testAreaMin && p.Y <= testAreaMax);
-Console.WriteLine($"Part 1 Result = {result1}");
+Part1();
+Part2();
 
-static IEnumerable<Vector> FindIntersectionPoints(IList<HailStone> stones)
+void Part1()
 {
-  for (var i = 0; i < stones.Count - 1; ++i)
+  var testAreaMin = args.Skip(1).Select(double.Parse).FirstOrDefault(200000000000000);
+  var testAreaMax = args.Skip(2).Select(double.Parse).FirstOrDefault(400000000000000);
+
+  var intersections = FindIntersectionPoints(input.Select(x => x.ProjectOntoZ()).ToList());
+  var result1 = intersections.Count(p => p.X >= testAreaMin && p.X <= testAreaMax
+                                      && p.Y >= testAreaMin && p.Y <= testAreaMax);
+  Console.WriteLine($"Part 1 Result = {result1}");
+
+  static IEnumerable<Vector> FindIntersectionPoints(IList<HailStone> stones)
   {
-    var a = stones[i];
-    for (var j = i + 1; j < stones.Count; ++j)
+    for (var i = 0; i < stones.Count - 1; ++i)
     {
-      var b = stones[j];
-      var ta = a.IntersectWith(b);
-      var tb = b.IntersectWith(a);
-      if (ta.HasValue && tb.HasValue)
-        yield return a.AtTime(ta.Value);
+      var a = stones[i];
+      for (var j = i + 1; j < stones.Count; ++j)
+      {
+        var b = stones[j];
+        var ta = a.IntersectWith(b);
+        var tb = b.IntersectWith(a);
+        if (ta.HasValue && tb.HasValue)
+          yield return a.AtTime(ta.Value);
+      }
     }
   }
+}
+
+void Part2()
+{
+  using var ctx = new Context();
+
+  RealExpr[] PR = [
+    (RealExpr)ctx.MkConst("PRx", ctx.RealSort),
+    (RealExpr)ctx.MkConst("PRy", ctx.RealSort),
+    (RealExpr)ctx.MkConst("PRz", ctx.RealSort)];
+
+  RealExpr[] VR = [
+    (RealExpr)ctx.MkConst("VRx", ctx.RealSort),
+    (RealExpr)ctx.MkConst("VRy", ctx.RealSort),
+    (RealExpr)ctx.MkConst("VRz", ctx.RealSort)];
+
+  const int count = 3;
+
+  var solver = ctx.MkSolver();
+  var stones = input.Take(count).ToArray();
+  for (var i = 0; i < stones.Length; ++i)
+  {
+    var (p, v) = stones[i];
+    var t = (RealExpr)ctx.MkConst($"t{i}", ctx.RealSort);
+    solver.Assert(
+      ctx.MkEq(PR[0], p.X + t * (v.X - VR[0])),
+      ctx.MkEq(PR[1], p.Y + t * (v.Y - VR[1])),
+      ctx.MkEq(PR[2], p.Z + t * (v.Z - VR[2])));
+  }
+
+  if (solver.Check() != Status.SATISFIABLE)
+  {
+    Console.WriteLine(solver.Check());
+    return;
+  }
+
+  var result2 = PR.Select(exp => (RatNum)solver.Model.Evaluate(exp))
+                  .Sum(n => n.Double);
+
+  Console.WriteLine($"Part 2 Result = {result2}");
 }
 
 record struct Vector(double X, double Y, double Z)
@@ -51,26 +99,6 @@ record struct Vector(double X, double Y, double Z)
       (Z * other.X) - (X * other.Z),
       (X * other.Y) - (Y * other.X));
 
-  public readonly double MagnitudeSquared()
-    => (X * X) + (Y * Y) + (Z * Z);
-
-  public readonly double Magnitude() => Math.Sqrt(MagnitudeSquared());
-
-  public readonly Vector Normalize()
-  {
-    var factor = Math.ReciprocalSqrtEstimate(Magnitude());
-    return new(X * factor, Y * factor, Z * factor);
-  }
-
-  public readonly Vector ProjectOnto(Vector other, bool normalize = true)
-  {
-    if (normalize)
-      other = other.Normalize();
-
-    var mag = Dot(other) / other.MagnitudeSquared();
-    return other.Scale(mag);
-  }
-
   public static Vector Parse(string input)
   {
     var parts = input.Split(',', 3, StringSplitOptions.TrimEntries)
@@ -83,15 +111,13 @@ record struct Vector(double X, double Y, double Z)
 
 record HailStone(Vector Position, Vector Velocity)
 {
-  //private Vector VelocityNormalized = Velocity.Normalize();
-
   public HailStone ProjectOntoZ()
     => new(Position.ProjectOntoZ(), Velocity.ProjectOntoZ());
 
   public double? IntersectWith(HailStone other)
   {
     var a = Velocity.Cross(other.Velocity);
-    var d = a.MagnitudeSquared();
+    var d = a.Dot(a);
 
     if (d == 0)
       return default;
