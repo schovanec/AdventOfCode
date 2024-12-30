@@ -2,9 +2,14 @@
 
 var (map, moves) = ParseInput(File.ReadAllLines(args.FirstOrDefault() ?? "input.txt"));
 
-var final = moves.Aggregate(map, (current, move) => current.MoveRobot(move));
-var result1 = final.EnumBoxCoordinates().Sum();
+var final1 = moves.Aggregate(map, (current, move) => current.MoveRobot(move));
+var result1 = final1.EnumBoxCoordinates().Sum();
 Console.WriteLine($"Part 1 Result = {result1}");
+
+var otherMap = map.Transform();
+var final2 = moves.Aggregate(otherMap, (current, move) => current.MoveRobot(move));
+var result2 = final2.EnumBoxCoordinates().Sum();
+Console.WriteLine($"Part 2 Result = {result2}");
 
 static (Map map, List<Vector> moves) ParseInput(string[] input)
 {
@@ -29,20 +34,46 @@ record struct Vector(int X, int Y)
   public Vector Add(Vector other) => new Vector(X + other.X, Y + other.Y);
 }
 
-record Map(Vector Robot, ImmutableHashSet<Vector> Walls, ImmutableHashSet<Vector> Boxes)
+record Box(Vector Position, int Width = 1)
 {
+  public IEnumerable<Vector> AllCoordinates
+    => Enumerable.Range(0, Width).Select(i => Position.Add(new(i, 0)));
+
+  public Box Move(Vector dir)
+    => this with { Position = Position.Add(dir) };
+}
+
+record Map(Vector Robot, ImmutableHashSet<Vector> Walls, ImmutableDictionary<Vector, Box> Boxes)
+{
+  public Map Transform()
+  {
+    var newWalls = (from p in Walls
+                    let x = p.X * 2
+                    from i in Enumerable.Range(0, 2)
+                    select new Vector(x + i, p.Y)).ToImmutableHashSet();
+
+    var newBoxes = (from b in Boxes.Values.Distinct()
+                    let c = new Box(b.Position with { X = b.Position.X * 2 }, 2)
+                    from p in c.AllCoordinates
+                    select (key: p, value: c)).ToImmutableDictionary(x => x.key, x => x.value);
+
+    var newRobot = new Vector(Robot.X * 2, Robot.Y);
+
+    return new Map(newRobot, newWalls, newBoxes);
+  }
+
   public Map MoveRobot(Vector dir)
   {
-    var gap = FindGap(Robot, dir);
-    if (gap.HasValue)
+    if (TryFindBoxesToMove(Robot, dir, out var boxes))
     {
       var robotNext = Robot.Add(dir);
-      if (gap.Value == robotNext)
-        return this with { Robot = robotNext };
 
       var builder = Boxes.ToBuilder();
-      builder.Remove(robotNext);
-      builder.Add(gap.Value);
+      builder.RemoveRange(boxes.SelectMany(b => b.AllCoordinates));
+      builder.AddRange(from b in boxes
+                       let next = b.Move(dir)
+                       from p in next.AllCoordinates
+                       select KeyValuePair.Create(p, next));
       return this with { Robot = robotNext, Boxes = builder.ToImmutable() };
     }
 
@@ -50,26 +81,41 @@ record Map(Vector Robot, ImmutableHashSet<Vector> Walls, ImmutableHashSet<Vector
   }
 
   public IEnumerable<int> EnumBoxCoordinates()
-    => Boxes.Select(b => b.X + (100 * b.Y));
+    => Boxes.Values
+            .Select(b => b.Position)
+            .Distinct()
+            .Select(b => b.X + (100 * b.Y));
 
-  private Vector? FindGap(Vector start, Vector dir)
+  private bool TryFindBoxesToMove(Vector start, Vector dir, out ImmutableHashSet<Box> boxes)
   {
-    var current = start;
-    while (true)
+    boxes = ImmutableHashSet<Box>.Empty;
+
+    var result = ImmutableHashSet.CreateBuilder<Box>();
+    var queue = new Queue<Vector>([start]);
+    while (queue.TryDequeue(out var pt))
     {
-      current = current.Add(dir);
-      if (Walls.Contains(current))
-        return default;
-      else if (!Boxes.Contains(current))
-        return current;
+      var next = pt.Add(dir);
+
+      if (Walls.Contains(next))
+        return false;
+
+      if (Boxes.TryGetValue(next, out var box) && !result.Contains(box))
+      {
+        result.Add(box);
+        foreach (var p in box.AllCoordinates)
+          queue.Enqueue(p);
+      }
     }
+
+    boxes = result.ToImmutable();
+    return true;
   }
 
   public static Map Parse(IReadOnlyList<string> input)
   {
     Vector? robot = default;
     var walls = ImmutableHashSet.CreateBuilder<Vector>();
-    var boxes = ImmutableHashSet.CreateBuilder<Vector>();
+    var boxes = ImmutableDictionary.CreateBuilder<Vector, Box>();
 
     using var e = input.GetEnumerator();
     for (var y = 0; y < input.Count; ++y)
@@ -85,7 +131,7 @@ record Map(Vector Robot, ImmutableHashSet<Vector> Walls, ImmutableHashSet<Vector
             break;
 
           case 'O':
-            boxes.Add(pt);
+            boxes.Add(pt, new Box(pt));
             break;
 
           case '@':
