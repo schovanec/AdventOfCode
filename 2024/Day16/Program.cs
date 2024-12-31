@@ -1,45 +1,73 @@
 ﻿using System.Collections.Immutable;
 
-var map = Map.Parse(File.ReadAllLines(args.FirstOrDefault() ?? "input.txt")); //"..\\..\\..\\reddit_sample1.txt"));
+var map = Map.Parse(File.ReadAllLines(args.FirstOrDefault() ?? "input.txt"));
 
-var result1 = FindShortestPath(map);
+TryFindShortestPath(map, out var result1, out var parentLookup);
 Console.WriteLine($"Part 1 Result = {result1}");
 
-static int FindShortestPath(Map map)
+var result2 = FindAllVisitedNodes(map.Goal, result1, parentLookup);
+Console.WriteLine($"Part 2 Result = {result2}");
+
+static bool TryFindShortestPath(
+  Map map,
+  out int shortestPathLength,
+  out ILookup<(Vector pos, int cost), (Vector prevPos, int prevCost)> parentLookup)
 {
-  var cost = new Dictionary<Vector, int> { [map.Start] = 0 };
-  var visited = new HashSet<Vector>();
-  var prev = new Dictionary<Vector, Vector>();
+  var parents = new HashSet<(Vector pos, int cost, Vector prevPos, int prevCost)>();
+  int? result = default;
+  var startNode = new Node(map.Start, Direction.East);
+  var visited = new HashSet<Node>();
 
   var queue = new PriorityQueue<Node, int>();
-  queue.Enqueue(new Node(map.Start, Direction.East), 0);
+  queue.Enqueue(startNode, 0);
 
-  while (queue.Count > 0)
+  while (queue.TryDequeue(out var node, out var pathCost))
   {
-    var node = queue.Dequeue();
-    var nodeCost = cost[node.Position];
+    if (pathCost > result)
+      break;
 
-    if (visited.Contains(node.Position))
+    if (visited.Contains(node))
       continue;
 
-    visited.Add(node.Position);
+    visited.Add(node);
 
     if (node.Position == map.Goal)
-      return nodeCost;
-
-    foreach (var (next, weight) in EnumMoves(node, map).Where(m => !visited.Contains(m.node.Position)))
     {
-      var n = nodeCost + weight;
-      if (n < cost.GetValueOrDefault(next.Position, int.MaxValue))
+      if (!result.HasValue)
+        result = pathCost;
+    }
+    else
+    {
+      foreach (var (next, weight) in EnumMoves(node, map).Where(m => !visited.Contains(m.node)))
       {
-        cost[next.Position] = n;
-        prev[next.Position] = node.Position;
+        var n = pathCost + weight;
+        parents.Add((next.Position, n, node.Position, pathCost));
         queue.Enqueue(next, n);
       }
     }
   }
 
-  return int.MaxValue;
+  shortestPathLength = result ?? int.MinValue;
+  parentLookup = parents.ToLookup(x => (x.pos, x.cost), x => (x.prevPos, x.prevCost));
+  return result.HasValue;
+}
+
+static int FindAllVisitedNodes(
+  Vector goal,
+  int goalPathLength,
+  ILookup<(Vector pos, int cost), (Vector prevPos, int prevCost)> parentLookup)
+{
+  var visited = new HashSet<Vector>();
+  var queue = new Queue<(Vector pos, int cost)>([(goal, goalPathLength)]);
+  while (queue.TryDequeue(out var node))
+  {
+    visited.Add(node.pos);
+
+    foreach (var parent in parentLookup[node])
+      queue.Enqueue(parent);
+  }
+
+  return visited.Count;
 }
 
 static IEnumerable<(Node node, int cost)> EnumMoves(Node node, Map map)
