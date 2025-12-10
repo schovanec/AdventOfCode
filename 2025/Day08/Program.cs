@@ -1,4 +1,5 @@
 ﻿using System.Collections.Immutable;
+using System.Diagnostics;
 
 var points = File.ReadLines(args.FirstOrDefault("input.txt"))
                  .Select(Point.Parse)
@@ -6,16 +7,22 @@ var points = File.ReadLines(args.FirstOrDefault("input.txt"))
 
 var pairsToConnect = int.Parse(args.Skip(1).FirstOrDefault("1000"));
 
+var clock = Stopwatch.StartNew();
 var (circuits, _, _) = FindCircuits(points, pairsToConnect);
 var result1 = circuits.OrderByDescending(x => x.Count)
                       .Take(3)
                       .Select(x => x.Count)
                       .Aggregate(1, (a, b) => a*b);
+clock.Stop();
 Console.WriteLine($"Part 1 Result = {result1}");
+Console.WriteLine($"Part 1 Time = {clock.Elapsed.TotalMilliseconds:#,##0.000}ms");
 
+clock.Restart();
 var (_, lastA, lastB) = FindCircuits(points, int.MaxValue);
 var result2 = lastA.X * lastB.X;
+clock.Stop();
 Console.WriteLine($"Part 2 Result = {result2}");
+Console.WriteLine($"Part 2 Time = {clock.Elapsed.TotalMilliseconds:#,##0.000}ms");
 
 static (IEnumerable<ImmutableHashSet<Point>> circuits, Point lastA, Point lastB) FindCircuits(ImmutableList<Point> points, int limit)
 {
